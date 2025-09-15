@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>People Counter Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0"></script>
+    <style>
+        :root {
+            --accent-color: #5a9fd4;
+            --accent-color-rgb: 90, 159, 212;
+        }
+
+        body.theme-green {
+            --accent-color: #4caf50;
+            --accent-color-rgb: 76, 175, 80;
+        }
+
+        body.theme-purple {
+            --accent-color: #9b59b6;
+            --accent-color-rgb: 155, 89, 182;
+        }
+
+        body {
+            background-color: #0f1423;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 24px;
+        }
+
+        .global-controls {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            display: flex;
+            gap: 16px;
+        }
+
+        .global-controls select {
+            background-color: #2a3652;
+            color: #e0e0e0;
+            border: 1px solid #415073;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .main-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            width: 100%;
+        }
+
+        .panel {
+            background: #1a2035;
+            border: 1px solid #2a3652;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 700px;
+            text-align: center;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #2a3652;
+            padding-bottom: 16px;
+            flex-shrink: 0;
+        }
+
+        .panel-title {
+            color: var(--accent-color);
+            font-weight: 600;
+            font-size: 16px;
+            transition: color 0.3s ease;
+        }
+
+        #current-date {
+            font-size: 14px;
+            color: #8ca2c8;
+        }
+
+        #counter {
+            font-size: 8rem;
+            font-weight: 200;
+            color: #ffffff;
+            text-shadow: 0 2px 8px rgba(var(--accent-color-rgb), 0.3);
+            line-height: 1;
+            margin: 20px 0;
+            transition: text-shadow 0.3s ease;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 200px;
+            position: relative;
+            margin-top: 20px;
+        }
+        
+        .sessions-summary {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .sessions-subtitle {
+            color: #8ca2c8;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .sessions-change {
+            color: #4caf50;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="global-controls">
+        <select id="timeframe-select">
+            <option value="Hourly">Hourly</option>
+            <option value="Daily">Daily</option>
+            <option value="Weekly">Weekly</option>
+            <option value="Monthly">Monthly</option>
+        </select>
+        <select id="theme-select">
+            <option value="blue">Default Theme</option>
+            <option value="green">Green Theme</option>
+            <option value="purple">Purple Theme</option>
+        </select>
+    </div>
+
+    <div class="main-content">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Live Counter</span>
+                <span id="current-date"></span>
+            </div>
+            <div id="counter">0</div>
+            <div class="chart-container">
+                <canvas id="sessionsChart"></canvas>
+            </div>
+            <div class="sessions-summary">
+                <div id="summary-subtitle" class="sessions-subtitle"></div>
+                <div id="summary-change" class="sessions-change">
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const counterElement = document.getElementById('counter');
+        const timeframeSelect = document.getElementById('timeframe-select');
+        const themeSelect = document.getElementById('theme-select');
+        const summarySubtitle = document.getElementById('summary-subtitle');
+        const summaryChange = document.getElementById('summary-change').children;
+        const dateElement = document.getElementById('current-date');
+        const ctx = document.getElementById('sessionsChart').getContext('2d');
+
+        let count = 0;
+        let chart;
+
+        const themes = {
+            blue: { name: 'blue', color: '#5a9fd4', rgb: '90, 159, 212' },
+            green: { name: 'green', color: '#4caf50', rgb: '76, 175, 80' },
+            purple: { name: 'purple', color: '#9b59b6', rgb: '155, 89, 182' }
+        };
+
+        const timeframeConfig = {
+            Hourly: { base: 500, variance: 20, delay: 1000 },
+            Daily: { base: 12000, variance: 50, delay: 2000 },
+            Weekly: { base: 84000, variance: 200, delay: 3000 },
+            Monthly: { base: 330000, variance: 500, delay: 4000 }
+        };
+
+        function displayDate() {
+            const today = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            dateElement.textContent = today.toLocaleDateString('en-US', options);
+        }
+
+        function updateTheme(themeName) {
+            const theme = themes[themeName];
+            document.body.className = `theme-${theme.name}`;
+            if (!chart) return;
+            const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+            gradient.addColorStop(0, `rgba(${theme.rgb}, 0.3)`);
+            gradient.addColorStop(1, `rgba(${theme.rgb}, 0)`);
+            chart.data.datasets[0].borderColor = theme.color;
+            chart.data.datasets[0].backgroundColor = gradient;
+            chart.update('none');
+        }
+        
+        function updateSummaryText(timeframe) {
+            const percentChange = (Math.random() * 30 + 5).toFixed(1);
+            const isPositive = Math.random() > 0.3;
+            const arrow = isPositive ? '↑' : '↓';
+            summarySubtitle.textContent = `Summary for this ${timeframe.toLowerCase().slice(0, -2)}`;
+            summaryChange[0].textContent = arrow;
+            summaryChange[1].textContent = `${percentChange}% vs previous ${timeframe.toLowerCase().slice(0, -2)}`;
+            summaryChange[1].parentElement.style.color = isPositive ? '#4caf50' : '#f44336';
+        }
+
+        function resetView(newTimeframe) {
+            const config = timeframeConfig[newTimeframe];
+            count = config.base + (Math.random() * config.variance * 4) - (config.variance * 2);
+            count = Math.round(count);
+
+            chart.options.scales.x.realtime.delay = config.delay;
+            chart.options.scales.x.realtime.duration = config.delay * 20;
+            chart.data.datasets[0].data.length = 0; // Clear history
+            chart.update({duration: 0});
+
+            updateSummaryText(newTimeframe);
+        }
+
+        function createChart() {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        data: [],
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: {
+                            type: 'realtime',
+                            realtime: {
+                                duration: 20000, // 20 seconds
+                                refresh: 1000, // 1 second
+                                delay: 2000, // 2 seconds
+                                onRefresh: chart => {
+                                    const increment = (Math.random() * 10) + 1;
+                                    count += increment;
+                                    counterElement.textContent = count.toLocaleString('en-US');
+                                    chart.data.datasets[0].data.push({
+                                        x: Date.now(),
+                                        y: count
+                                    });
+                                }
+                            }
+                        },
+                        y: { display: false }
+                    }
+                }
+            });
+        }
+
+        timeframeSelect.addEventListener('change', (e) => resetView(e.target.value));
+        themeSelect.addEventListener('change', (e) => updateTheme(e.target.value));
+
+        // Initial setup
+        displayDate();
+        createChart();
+        updateTheme(themeSelect.value);
+        resetView(timeframeSelect.value);
+    </script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+.panel {
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    text-align: center;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4);
+    opacity: 0.8;
+  }
+
+  .panel:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 30px 70px rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+    padding-bottom: 16px;
+  }
+
+  .panel-title-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .panel-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffffff;
+  }
+
+  .icon {
+    width: 24px;
+    height: 24px;
+    color: #3b82f6;
+  }
+
+  .panel-date {
+    font-size: 14px;
+    color: #64748b;
+  }
+
+  .counter {
+    font-size: 7rem;
+    font-weight: 300;
+    color: #ffffff;
+    text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    line-height: 1;
+    margin: 20px 0;
+    transition: text-shadow 0.3s ease;
+  }
+
+  .chart-container {
+    flex-grow: 1;
+    min-height: 100px;
+    width: 100%;
+    position: relative;
+    margin-top: 20px;
+  }
+
+  .sessions-summary {
+    text-align: center;
+    margin-top: 20px;
+  }
+
+  .sessions-subtitle {
+    color: #64748b;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .sessions-change {
+    font-size: 12px;
+    margin-top: 4px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .sessions-change.positive {
+    color: #10b981;
+  }
+
+  .sessions-change.negative {
+    color: #ef4444;
+  }

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiple Location Counters</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --accent-color: #3b82f6;
+            --accent-color-rgb: 59, 130, 246;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 24px;
+            /* Removed flex properties to allow grid layout */
+        }
+
+        .global-controls {
+            position: fixed; /* Fixed position relative to viewport */
+            top: 0;
+            left: 0;
+            right: 0; /* Full width */
+            background: rgba(15, 23, 42, 0.95); /* Darker background for overlay effect */
+            padding: 15px 24px;
+            display: flex;
+            justify-content: center; /* Center content horizontally */
+            align-items: center;
+            gap: 20px; /* Slightly more gap */
+            z-index: 1000; /* High z-index to be on top of everything */
+            transform: translateY(-100%); /* Initially hidden above the viewport */
+            transition: transform 0.3s ease-out; /* Smooth transition */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); /* Subtle shadow */
+        }
+
+        .global-controls:hover {
+            top: 0; /* Fully visible on hover */
+        }
+
+        /* Adjust select box style for better visibility on dark background */
+        .global-controls select {
+            background-color: #2a3652; /* Slightly lighter than panel background */
+            color: #e0e0e0;
+            border: 1px solid #415073;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: 14px;
+            cursor: pointer;
+            appearance: none; /* Remove default select arrow */
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%20viewBox%3D%220%200%20292.4%20292.4%22%3E%3Cpath%20fill%3D%22%23e0e0e0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13.2-5.6H18.6c-5%200-9.3%201.8-13.2%205.6-3.9%203.9-5.6%208.2-5.6%2013.2%200%205%201.8%209.3%205.6%2013.2l128%20128c3.9%203.9%208.2%205.6%2013.2%205.6s9.3-1.8%2013.2-5.6l128-128c3.9-3.9%205.6-8.2%205.6-13.2%200-5-1.8-9.3-5.6-13.2z%22%2F%3E%3C%2Fsvg%3E');
+            background-repeat: no-repeat;
+            background-position: right 10px top 50%;
+            background-size: 12px auto;
+            padding-right: 30px; /* Space for custom arrow */
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); /* Adjust minmax as needed */
+            gap: 24px;
+            max-width: 1400px; /* Max width for the grid */
+            margin: 0 auto; /* Center the grid */
+            padding-top: 60px; /* Space for global controls */
+        }
+
+        .panel {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4);
+            opacity: 0.8;
+        }
+
+        .panel:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 30px 70px rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+            padding-bottom: 16px;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .panel-title .icon {
+            width: 24px;
+            height: 24px;
+            color: var(--accent-color);
+        }
+
+        .panel-date { font-size: 14px; color: #64748b; } /* Changed ID to class */
+
+        .counter {
+            font-size: 7rem;
+            font-weight: 300;
+            color: #ffffff;
+            text-shadow: 0 0 20px rgba(var(--accent-color-rgb), 0.5);
+            line-height: 1;
+            margin: 20px 0;
+            transition: text-shadow 0.3s ease;
+        }
+
+        .chart-container {
+            flex-grow: 1; /* Allow chart container to take available space */
+            min-height: 100px; /* Minimum height for chart */
+            width: 100%; /* Ensure canvas takes full width of its container */
+            position: relative; /* Keep relative for Chart.js responsiveness */
+            margin-top: 20px;
+        }
+        
+        .sessions-summary { text-align: center; margin-top: 20px; }
+        .sessions-subtitle { color: #64748b; font-size: 12px; margin-bottom: 4px; }
+        .sessions-change { font-size: 12px; margin-top: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+        .sessions-change.positive { color: #10b981; }
+        .sessions-change.negative { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="global-controls">
+        <select id="timeframe-select">
+            <option value="Hourly">Hourly</option>
+            <option value="Daily">Daily</option>
+            <option value="Weekly">Weekly</option>
+            <option value="Monthly">Monthly</option>
+        </select>
+    </div>
+    <div class="dashboard-grid" id="dashboard-grid">
+        <!-- Location panels will be dynamically inserted here -->
+    </div>
+    <script>
+        const dashboardGrid = document.getElementById('dashboard-grid');
+        const timeframeSelect = document.getElementById('timeframe-select');
+        
+        const locationsData = [
+            { id: 'main-entrance', name: 'Main Entrance', initialCount: 1200 },
+            { id: 'second-floor', name: 'Second Floor', initialCount: 850 },
+            { id: 'warehouse-a', name: 'Warehouse A', initialCount: 300 },
+            { id: 'office-area', name: 'Office Area', initialCount: 600 },
+            { id: 'loading-dock', name: 'Loading Dock', initialCount: 450 },
+            { id: 'cafeteria', name: 'Cafeteria', initialCount: 700 }
+        ];
+
+        const locationCharts = {}; // To store Chart.js instances for each location
+        const locationCounts = {}; // To store current counts for each location
+
+        const theme = { color: '#3b82f6', rgb: '59, 130, 246' };
+
+        function displayDate(element) {
+            const today = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            element.textContent = today.toLocaleDateString('en-US', options);
+        }
+
+        function updateChartTheme(chart, ctx) {
+            const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+            gradient.addColorStop(0, `rgba(${theme.rgb}, 0.4)`);
+            gradient.addColorStop(1, `rgba(${theme.rgb}, 0)`);
+            chart.data.datasets[0].borderColor = theme.color;
+            chart.data.datasets[0].backgroundColor = gradient;
+            chart.update();
+        }
+
+        function createChart(ctx) {
+            Chart.defaults.font.family = "'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif";
+            Chart.defaults.color = '#64748b';
+            return new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { 
+                        x: { display: false, grid: { display: false } }, 
+                        y: { display: false, grid: { display: false } } 
+                    },
+                }
+            });
+        }
+
+        function generateRandomData(points, base, variance) {
+            let data = [];
+            let lastVal = base;
+            for (let i = 0; i < points; i++) {
+                let newVal = lastVal + (Math.random() * variance * 2) - variance;
+                lastVal = newVal > 0 ? newVal : 0;
+                data.push(Math.round(lastVal));
+            }
+            return data;
+        }
+
+        function updateSummaryText(locationId, timeframe) {
+            const summarySubtitle = document.getElementById(`summary-subtitle-${locationId}`);
+            const summaryChangeEl = document.getElementById(`summary-change-${locationId}`);
+            const summaryChange = summaryChangeEl.children;
+
+            const percentChange = (Math.random() * 30 + 5).toFixed(1);
+            const isPositive = Math.random() > 0.3;
+            const arrow = isPositive ? '↑' : '↓';
+            summarySubtitle.textContent = `Summary for the last ${timeframe.toLowerCase().slice(0, -2)}`;
+            summaryChange[0].textContent = arrow;
+            summaryChange[1].textContent = `${percentChange}% vs previous ${timeframe.toLowerCase().slice(0, -2)}`;
+            
+            summaryChangeEl.className = 'sessions-change ' + (isPositive ? 'positive' : 'negative');
+        }
+
+        function resetView(locationId, newTimeframe) {
+            const config = {
+                Hourly: { points: 30, base: 500, variance: 20 },
+                Daily: { points: 30, base: 12000, variance: 500 },
+                Weekly: { points: 30, base: 84000, variance: 3000 },
+                Monthly: { points: 30, base: 330000, variance: 10000 }
+            }[newTimeframe];
+
+            const data = generateRandomData(config.points, config.base, config.variance);
+            const labels = Array(config.points).fill('');
+            locationCounts[locationId] = data[data.length - 1];
+
+            const chart = locationCharts[locationId];
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = data;
+            chart.update();
+
+            document.getElementById(`counter-${locationId}`).textContent = locationCounts[locationId].toLocaleString('en-US');
+            updateSummaryText(locationId, newTimeframe);
+        }
+
+        function appendLiveValue() {
+            locationsData.forEach(loc => {
+                const increment = Math.floor(Math.random() * 10) + 1;
+                locationCounts[loc.id] += increment;
+                document.getElementById(`counter-${loc.id}`).textContent = locationCounts[loc.id].toLocaleString('en-US');
+
+                const chart = locationCharts[loc.id];
+                chart.data.labels.push('');
+                chart.data.datasets[0].data.push(locationCounts[loc.id]);
+                if (chart.data.labels.length > 60) {
+                    chart.data.labels.shift();
+                    chart.data.datasets[0].data.shift();
+                }
+                chart.update('quiet');
+            });
+        }
+
+        function initializeDashboard() {
+            dashboardGrid.innerHTML = ''; // Clear existing content
+
+            locationsData.forEach(loc => {
+                const panelHtml = `
+                    <div class="panel">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                <span>${loc.name}</span>
+                            </div>
+                            <span class="panel-date" id="date-${loc.id}"></span>
+                        </div>
+                        <div class="counter" id="counter-${loc.id}">0</div>
+                        <div class="chart-container"><canvas id="chart-${loc.id}"></canvas></div>
+                        <div class="sessions-summary">
+                            <div id="summary-subtitle-${loc.id}" class="sessions-subtitle"></div>
+                            <div id="summary-change-${loc.id}"><span></span><span></span></div>
+                        </div>
+                    </div>
+                `;
+                dashboardGrid.insertAdjacentHTML('beforeend', panelHtml);
+
+                // Initialize date
+                displayDate(document.getElementById(`date-${loc.id}`));
+
+                // Initialize chart
+                const ctx = document.getElementById(`chart-${loc.id}`).getContext('2d');
+                const chart = createChart(ctx);
+                locationCharts[loc.id] = chart;
+                locationCounts[loc.id] = loc.initialCount; // Set initial count
+                updateChartTheme(chart, ctx); // Apply theme to new chart
+                resetView(loc.id, timeframeSelect.value); // Populate initial data
+            });
+        }
+
+        timeframeSelect.addEventListener('change', (e) => {
+            locationsData.forEach(loc => resetView(loc.id, e.target.value));
+        });
+
+        setInterval(appendLiveValue, 2000);
+
+        // Initial setup
+        initializeDashboard();
+    </script>
+</body>
+</html>>ml>>

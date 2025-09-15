@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Charts Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .dashboard-controls {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px 32px 0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .control-btn {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #3b82f6;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+        }
+
+        .control-btn .icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 24px;
+        }
+
+        .chart-card {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .chart-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4);
+            opacity: 0.8;
+        }
+
+        .chart-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 30px 70px rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+        
+        .chart-card.sortable-ghost {
+            background: rgba(59, 130, 246, 0.1);
+            opacity: 0.5;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            cursor: move;
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-title .icon {
+            width: 24px;
+            height: 24px;
+            color: #3b82f6;
+        }
+
+        .chart-subtitle {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .stats-grid {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 8px;
+        }
+
+        .stat-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(59, 130, 246, 0.15);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(59, 130, 246, 0.3);
+            box-shadow: 0 15px 35px rgba(59, 130, 246, 0.1);
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            margin-top: 4px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-change .icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        .stat-change.positive {
+            color: #10b981;
+        }
+
+        .stat-change.negative {
+            color: #ef4444;
+        }
+
+        #customize-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+        }
+        #customize-modal-content {
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #customize-modal-content h3 {
+            margin-bottom: 20px;
+            color: #3b82f6;
+            font-size: 22px;
+        }
+        #customize-modal-close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            color: #64748b;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        #customize-modal-close:hover {
+            color: #ffffff;
+        }
+        #customize-modal .chart-toggle {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        #customize-modal .chart-toggle input[type="checkbox"] {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            accent-color: #3b82f6;
+        }
+        #customize-modal .chart-toggle label {
+            font-size: 16px;
+            color: #e0e0e0;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chart-card, .stat-card {
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media print {
+            body {
+                background: #ffffff;
+                color: #000000;
+            }
+            .dashboard-controls, #customize-modal {
+                display: none;
+            }
+            .dashboard {
+                display: block;
+            }
+            .chart-card, .stat-card {
+                box-shadow: none;
+                border: 1px solid #ccc;
+                page-break-inside: avoid;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-controls">
+        <button class="control-btn" id="customize-btn"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>Customize</button>
+        <button class="control-btn" id="export-btn"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>Export Report</button>
+    </div>
+
+    <div id="customize-modal">
+        <div id="customize-modal-content">
+            <span id="customize-modal-close">&times;</span>
+            <h3>Customize Dashboard</h3>
+            <div id="chart-toggle-list"></div>
+        </div>
+    </div>
+
+    <div class="dashboard" id="dashboard-container">
+        <div class="stats-grid">
+            <div class="stat-card"> <div class="stat-value">152.3K</div> <div class="stat-label">Total Sessions</div> <div class="stat-change positive"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>+12.5%</div> </div>
+            <div class="stat-card"> <div class="stat-value">98.7K</div> <div class="stat-label">Unique Users</div> <div class="stat-change positive"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>+8.3%</div> </div>
+            <div class="stat-card"> <div class="stat-value">2.45</div> <div class="stat-label">Avg. Session Duration</div> <div class="stat-change negative"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17l-5-5m0 0l5-5m-5 5h12"></path></svg>-2.1%</div> </div>
+            <div class="stat-card"> <div class="stat-value">$89.2K</div> <div class="stat-label">Revenue</div> <div class="stat-change positive"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>+15.7%</div> </div>
+        </div>
+
+        <div class="chart-card full-width" data-chart-id="trafficChart"> <div class="chart-header"> <div> <div class="chart-title"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>Traffic Trends</div> <div class="chart-subtitle">Sessions and users over time</div> </div> </div> <div class="chart-container"> <canvas id="trafficChart"></canvas> </div> </div>
+        <div class="chart-card" data-chart-id="demographicsChart"> <div class="chart-header"> <div> <div class="chart-title"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>User Demographics</div> <div class="chart-subtitle">Age distribution</div> </div> </div> <div class="chart-container"> <canvas id="demographicsChart"></canvas> </div> </div>
+        <div class="chart-card" data-chart-id="deviceChart"> <div class="chart-header"> <div> <div class="chart-title"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>Device Usage</div> <div class="chart-subtitle">Traffic by device type</div> </div> </div> <div class="chart-container"> <canvas id="deviceChart"></canvas> </div> </div>
+        <div class="chart-card" data-chart-id="revenueChart"> <div class="chart-header"> <div> <div class="chart-title"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>Revenue Analysis</div> <div class="chart-subtitle">Monthly revenue trends</div> </div> </div> <div class="chart-container"> <canvas id="revenueChart"></canvas> </div> </div>
+        <div class="chart-card" data-chart-id="pagesChart"> <div class="chart-header"> <div> <div class="chart-title"><svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>Page Performance</div> <div class="chart-subtitle">Most visited pages</div> </div> </div> <div class="chart-container"> <canvas id="pagesChart"></canvas> </div> </div>
+    </div>
+
+    <script>
+        Chart.defaults.font.family = "'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif";
+        Chart.defaults.font.size = 12;
+        Chart.defaults.color = '#64748b';
+
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { usePointStyle: true, padding: 20, color: '#94a3b8' } } },
+            scales: {
+                x: { grid: { color: 'rgba(59, 130, 246, 0.1)', drawBorder: false }, ticks: { color: '#64748b' } },
+                y: { grid: { color: 'rgba(59, 130, 246, 0.1)', drawBorder: false }, ticks: { color: '#64748b' } }
+            }
+        };
+
+        const chartConfigs = {
+            trafficChart: { type: 'line', data: { labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'], datasets: [{ label: 'Sessions', data: [120, 190, 150, 250, 220, 300, 350], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.4 }, { label: 'Users', data: [80, 120, 100, 180, 160, 220, 260], borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', fill: true, tension: 0.4 }] }, options: chartOptions },
+            demographicsChart: { type: 'doughnut', data: { labels: ['18-24', '25-34', '35-44', '45+'], datasets: [{ data: [30, 40, 20, 10], backgroundColor: ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { usePointStyle: true, color: '#94a3b8' } } } } },
+            deviceChart: { type: 'pie', data: { labels: ['Desktop', 'Mobile', 'Tablet'], datasets: [{ data: [55, 35, 10], backgroundColor: ['#3b82f6', '#8b5cf6', '#06b6d4'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, color: '#94a3b8' } } } } },
+            revenueChart: { type: 'bar', data: { labels: ['Q1', 'Q2', 'Q3', 'Q4'], datasets: [{ label: 'Revenue ($K)', data: [65, 78, 89, 95], backgroundColor: 'rgba(59, 130, 246, 0.8)', borderColor: '#3b82f6', borderWidth: 1, borderRadius: 8 }] }, options: chartOptions },
+            pagesChart: { type: 'bar', data: { labels: ['Home', 'Products', 'About', 'Contact'], datasets: [{ label: 'Page Views', data: [150, 120, 80, 50], backgroundColor: 'rgba(139, 92, 246, 0.8)', borderColor: '#8b5cf6', borderWidth: 1, borderRadius: 8 }] }, options: { ...chartOptions, indexAxis: 'y' } }
+        };
+
+        Object.keys(chartConfigs).forEach(id => new Chart(document.getElementById(id), chartConfigs[id]));
+
+        const dashboardContainer = document.getElementById('dashboard-container');
+        new Sortable(dashboardContainer, {
+            animation: 150,
+            handle: '.chart-header',
+            filter: '.stats-grid',
+            ghostClass: 'sortable-ghost'
+        });
+
+        // Export button
+        document.getElementById('export-btn').addEventListener('click', () => window.print());
+
+        // Customize modal
+        const customizeModal = document.getElementById('customize-modal');
+        const customizeBtn = document.getElementById('customize-btn');
+        const customizeModalClose = document.getElementById('customize-modal-close');
+        const chartToggleList = document.getElementById('chart-toggle-list');
+        const chartCards = document.querySelectorAll('.chart-card');
+
+        chartCards.forEach(card => {
+            const chartId = card.dataset.chartId;
+            const chartTitle = card.querySelector('.chart-title').textContent;
+            const toggleItem = document.createElement('div');
+            toggleItem.className = 'chart-toggle';
+            toggleItem.innerHTML = `
+                <input type="checkbox" id="toggle-${chartId}" data-chart-id="${chartId}" ${card.classList.contains('hidden') ? '' : 'checked'}>
+                <label for="toggle-${chartId}">${chartTitle}</label>
+            `;
+            chartToggleList.appendChild(toggleItem);
+        });
+
+        customizeBtn.addEventListener('click', () => {
+            customizeModal.style.display = 'flex';
+        });
+
+        customizeModalClose.addEventListener('click', () => {
+            customizeModal.style.display = 'none';
+        });
+
+        customizeModal.addEventListener('click', (e) => {
+            if (e.target === customizeModal) {
+                customizeModal.style.display = 'none';
+            }
+        });
+
+        chartToggleList.addEventListener('change', (e) => {
+            if (e.target.type === 'checkbox') {
+                const chartId = e.target.dataset.chartId;
+                const cardToToggle = document.querySelector(`.chart-card[data-chart-id="${chartId}"]`);
+                if (cardToToggle) {
+                    cardToToggle.classList.toggle('hidden', !e.target.checked);
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>

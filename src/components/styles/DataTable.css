@@ -1,0 +1,217 @@
+.data-table-container {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+
+  .table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .table-header h3 {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .table-actions {
+    display: flex;
+    gap: 12px;
+  }
+
+  .export-btn {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #3b82f6;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+  }
+
+  .export-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+
+  .filters {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .filter-input, .filter-select {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #e0e0e0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    min-width: 150px;
+  }
+
+  .filter-input:focus, .filter-select:focus {
+    border-color: rgba(59, 130, 246, 0.6);
+    outline: none;
+  }
+
+  .reset-btn {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+  }
+
+  .reset-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    margin-bottom: 20px;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .data-table th {
+    background: rgba(30, 41, 59, 0.8);
+    color: #94a3b8;
+    text-align: left;
+    padding: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  .data-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .data-table th.sortable:hover {
+    color: #3b82f6;
+  }
+
+  .data-table th.sorted {
+    color: #3b82f6;
+  }
+
+  .sort-indicator {
+    margin-left: 8px;
+    font-size: 12px;
+  }
+
+  .data-table td {
+    padding: 12px;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.1);
+    color: #e0e0e0;
+  }
+
+  .data-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.05);
+  }
+
+  .status-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .status-active {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+  }
+
+  .status-inactive {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+  }
+
+  .status-maintenance {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+  }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .page-btn {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #94a3b8;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+  }
+
+  .page-btn:hover:not(:disabled) {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+
+  .page-btn.active {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.6);
+  }
+
+  .page-numbers {
+    display: flex;
+    gap: 4px;
+  }
+
+  .table-info {
+    text-align: center;
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  @media (max-width: 768px) {
+    .table-header {
+      flex-direction: column;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .filters {
+      flex-direction: column;
+    }
+
+    .filter-input, .filter-select {
+      min-width: 100%;
+    }
+
+    .pagination {
+      flex-wrap: wrap;
+    }
+  }
