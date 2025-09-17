@@ -2,13 +2,14 @@
   import './styles/LiveCounter.css';
   import { onMount, onDestroy } from 'svelte';
   import Chart from './Chart.svelte';
-  import { getLocation, getLocationChartData, setupRealTimeUpdates } from '../lib/stores/analytics.js';
+  import { getLocation, getLocationChartData, setupRealTimeUpdates, locations, updateLiveTimeframe, subscribeToLocationWithTimeframe, loadProgressiveSamples } from '../lib/stores/analytics.js';
+  import analyticsAPI from '../lib/api/analytics.js';
   
   
   export let location = {
     id: 'default',
     name: 'Default Location', // Translate default location name
-    initialCount: 1000
+    initialCount: 0
   };
   export let theme = { color: '#3b82f6', rgb: '59, 130, 246' };
   export let timeframe = 'Hourly';
@@ -30,6 +31,13 @@
   let containerWidth = 300;
   let isLoading = false;
   let unsubscribeRealTime = null;
+  let unsubscribeLocations = null;
+  
+  // Progressive loading and animation state
+  let isProgressiveLoading = false;
+  let animatedCount = 0;
+  let progressiveChartData = [];
+  let animationFrame = null;
   
   function getTimeframeConfig(width) {
     // Base points calculation based on width (more width = more points for better resolution)
@@ -45,21 +53,103 @@
   
   onMount(() => {
     displayDate();
-    loadLocationData();
     updateContainerWidth();
+    
+    // Start with progressive loading for real locations on initial mount
+    if (location.id && location.id !== 'default' && location.id !== 'all-data') {
+      // Initialize with progressive loading
+      isProgressiveLoading = true;
+      animatedCount = 0;
+      count = 0;
+      
+      // Request progressive sample loading for initial timeframe
+      loadProgressiveSamples(location.id, timeframe, 50);
+      
+      summaryText = `تحميل البيانات الأولية...`;
+      changeText = `جاري تحميل ${timeframe.toLowerCase()}`;
+      changeDirection = 'positive';
+    } else {
+      // For default/all-data locations, use regular loading
+      loadLocationData();
+    }
     
     // Setup real-time updates
     unsubscribeRealTime = setupRealTimeUpdates();
     
-    // Start periodic data refresh
+    // Subscribe to location store changes for real-time updates
+    unsubscribeLocations = locations.subscribe($locations => {
+      if (isProgressiveLoading) {
+        // Skip updates during progressive loading
+        return;
+      }
+      
+      if (location.id === 'all-data') {
+        // For combined data, sum all regional locations
+        const totalCount = $locations.reduce((sum, loc) => sum + (loc.liveCount || 0), 0);
+        if (totalCount !== count) {
+          count = totalCount;
+          animatedCount = totalCount;
+          console.log('🔥 LiveCounter: Updated combined count from real-time:', count);
+        }
+      } else if (location.id && location.id !== 'default') {
+        // For specific location, find matching location
+        const locationData = $locations.find(loc => loc.id === location.id);
+        if (locationData && locationData.liveCount !== undefined && locationData.liveCount !== count) {
+          count = locationData.liveCount;
+          animatedCount = locationData.liveCount;
+          console.log('🔥 LiveCounter: Updated count from real-time:', count, 'for', location.id);
+        }
+      }
+    });
+    
+    // Setup progressive loading event listeners
+    const handleProgressiveSample = (event) => {
+      if (event.detail.locationId === location.id) {
+        console.log(`📈 LiveCounter: Received progressive sample ${event.detail.sampleIndex}/${event.detail.totalSamples}`);
+        
+        // Update animated counter with smooth progression
+        animatedCount = event.detail.cumulativeCount;
+        
+        // Update chart data progressively
+        if (showChart && event.detail.chartData) {
+          progressiveChartData = [...progressiveChartData, event.detail.chartData];
+          if (chartComponent) {
+            chartComponent.updateData(progressiveChartData);
+          }
+        }
+      }
+    };
+    
+    const handleProgressiveComplete = (event) => {
+      if (event.detail.locationId === location.id) {
+        console.log(`✅ LiveCounter: Progressive loading complete, final count: ${event.detail.finalCount}`);
+        
+        // Set final count and stop progressive loading
+        count = event.detail.finalCount;
+        animatedCount = event.detail.finalCount;
+        isProgressiveLoading = false;
+        
+        // Update chart with final data
+        chartData = progressiveChartData;
+        progressiveChartData = [];
+      }
+    };
+    
+    // Add event listeners
+    window.addEventListener('progressiveSample', handleProgressiveSample);
+    window.addEventListener('progressiveLoadingComplete', handleProgressiveComplete);
+    
+    // Start periodic data refresh (reduced frequency since we have real-time updates)
     updateInterval = setInterval(() => {
-      loadLocationData();
-    }, 10000); // Refresh every 10 seconds
+      if (!isProgressiveLoading) {
+        loadLocationData();
+      }
+    }, 30000); // Refresh every 30 seconds
 
     // Listen for resize events
     const resizeObserver = new ResizeObserver(() => {
       updateContainerWidth();
-      if (showChart && timeframe) {
+      if (showChart && timeframe && !isProgressiveLoading) {
         loadChartData();
       }
     });
@@ -70,6 +160,8 @@
 
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener('progressiveSample', handleProgressiveSample);
+      window.removeEventListener('progressiveLoadingComplete', handleProgressiveComplete);
     };
   });
   
@@ -79,6 +171,9 @@
     }
     if (unsubscribeRealTime) {
       unsubscribeRealTime();
+    }
+    if (unsubscribeLocations) {
+      unsubscribeLocations();
     }
   });
   
@@ -92,27 +187,98 @@
    * Load real location data from API
    */
   async function loadLocationData() {
+    console.log('📊 LiveCounter: Loading location data for:', location.id);
+    
     if (!location.id || location.id === 'default') {
-      // For default/demo locations, start with 0 and wait for real data
-      count = 0;
+      console.log('⚠️ LiveCounter: Using demo mode for default location');
+      // For default/demo locations, load real analytics summary data
+      try {
+        const summaryData = await analyticsAPI.getAnalyticsSummary('DAILY');
+        if (summaryData) {
+          count = summaryData.totalVisitors || 0; // Use real data or zero
+          console.log('✅ LiveCounter: Loaded analytics summary data, total visitors:', count);
+        } else {
+          count = 0; // No fake data - wait for real data
+        }
+      } catch (error) {
+        console.error('❌ LiveCounter: Failed to load analytics summary:', error);
+        count = 0; // No fake data - wait for real data
+      }
+      return;
+    }
+
+    if (location.id === 'all-data') {
+      console.log('📊 LiveCounter: Loading combined data from all regional locations');
+      try {
+        const allLocations = await analyticsAPI.getAllLocations();
+        console.log('✅ LiveCounter: Got all locations:', allLocations);
+        
+        // Calculate total count from all regional locations
+        const totalCount = allLocations.reduce((sum, loc) => sum + (loc.liveCount || 0), 0);
+        count = totalCount;
+        summaryText = `Combined data from ${allLocations.length} regions`;
+        changeText = 'Live updates from all locations';
+        changeDirection = 'positive';
+        
+        console.log('✅ LiveCounter: Combined count from all regions:', count);
+      } catch (error) {
+        console.error('❌ LiveCounter: Failed to load all locations:', error);
+        count = 0;
+      }
       return;
     }
 
     isLoading = true;
     try {
+      console.log('🔄 LiveCounter: Fetching location data for:', location.id);
       const locationData = await getLocation(location.id);
-      if (locationData) {
+      
+      if (locationData && locationData.liveCount !== undefined) {
         count = locationData.liveCount;
+        summaryText = `Real-time data for ${locationData.name}`;
+        changeText = 'Live updates';
+        changeDirection = 'positive';
+        console.log('✅ LiveCounter: Got live count:', count, 'for', locationData.name);
+        
         if (locationData.summary) {
-          summaryText = locationData.summary.text || '';
-          changeText = locationData.summary.changePercentage || '';
-          changeDirection = locationData.summary.changeDirection || 'positive';
+          summaryText = locationData.summary.text || summaryText;
+          changeText = locationData.summary.changePercentage || changeText;
+          changeDirection = locationData.summary.changeDirection || changeDirection;
+        }
+      } else {
+        console.log('⚠️ LiveCounter: No live count data, using realtime API fallback');
+        // Try to get realtime count data as fallback
+        try {
+          const realtimeData = await analyticsAPI.getRealtimeCount(location.id);
+          if (realtimeData && realtimeData.locations) {
+            const locationRealtime = realtimeData.locations.find(loc => loc.location_id === location.id);
+            if (locationRealtime) {
+              count = locationRealtime.live_count || 0;
+              summaryText = `Real-time data for ${location.name}`;
+              changeText = 'Realtime API';
+              changeDirection = 'positive';
+              console.log('✅ LiveCounter: Got realtime count:', count);
+            } else {
+              throw new Error('Location not found in realtime data');
+            }
+          } else {
+            throw new Error('No realtime data available');
+          }
+        } catch (realtimeError) {
+          console.log('⚠️ LiveCounter: Realtime fallback failed:', realtimeError.message);
+          // Don't fallback to fake data - keep at 0 until real data comes
+          count = 0;
+          summaryText = `${location.name}`;
+          changeText = 'Waiting for data...';
+          changeDirection = 'neutral';
         }
       }
     } catch (error) {
-      console.error('Failed to load location data:', error);
-      // Don't fallback to fake data - keep at 0 until real data comes
+      console.error('❌ LiveCounter: Failed to load location data:', error);
       count = 0;
+      summaryText = location.name;
+      changeText = 'Connection error';
+      changeDirection = 'negative';
     } finally {
       isLoading = false;
     }
@@ -122,9 +288,36 @@
    * Load chart data from API
    */
   async function loadChartData() {
-    if (!showChart || !location.id || location.id === 'default') {
-      // For default/demo locations, show empty chart instead of mock data
+    console.log('📈 LiveCounter: Loading chart data for:', location.id, 'timeframe:', timeframe);
+    
+    if (!showChart) {
+      console.log('⚠️ LiveCounter: Chart disabled, skipping chart data load');
       chartData = [];
+      return;
+    }
+
+    if (!location.id || location.id === 'default') {
+      console.log('⚠️ LiveCounter: Using visitor trends for default location');
+      // For default/demo locations, use visitor trends data
+      try {
+        const chartResult = await analyticsAPI.getVisitorTrendsChart('DAILY');
+        if (chartResult && chartResult.labels && chartResult.datasets) {
+          // Convert chart format to expected format
+          chartData = chartResult.labels.map((label, index) => ({
+            time: label,
+            count: chartResult.datasets[0]?.data[index] || 0
+          }));
+          console.log('✅ LiveCounter: Loaded visitor trends data:', chartData.length, 'points');
+          if (chartComponent) {
+            chartComponent.updateData(chartData);
+          }
+        } else {
+          chartData = [];
+        }
+      } catch (error) {
+        console.error('❌ LiveCounter: Failed to load visitor trends:', error);
+        chartData = [];
+      }
       return;
     }
 
@@ -141,16 +334,16 @@
       
       if (data && data.length > 0) {
         chartData = data;
+        console.log('✅ LiveCounter: Loaded location chart data:', data.length, 'points');
         if (chartComponent) {
           chartComponent.updateData(chartData);
         }
       } else {
-        // No data available - show empty chart
+        console.log('⚠️ LiveCounter: No chart data available');
         chartData = [];
       }
     } catch (error) {
-      console.error('Failed to load chart data:', error);
-      // On error, show empty chart instead of fake data
+      console.error('❌ LiveCounter: Failed to load chart data:', error);
       chartData = [];
     }
   }
@@ -208,14 +401,76 @@
     changeText = `${percentChange}% مقارنة بـ${timeframe.period} السابقة`;
   }
   
-  function resetView(newTimeframe) {
-    // Load real data instead of generating random data
-    loadLocationData();
-    if (showChart) {
-      loadChartData();
+  async function resetView(newTimeframe) {
+    console.log('🔄 LiveCounter: Timeframe changed to:', newTimeframe);
+    
+    // Start progressive loading for real locations
+    if (location.id && location.id !== 'default' && location.id !== 'all-data') {
+      // Start progressive loading
+      isProgressiveLoading = true;
+      animatedCount = 0;
+      progressiveChartData = [];
+      
+      // Reset counter to 0 for smooth animation
+      count = 0;
+      
+      // Request progressive sample loading (50 samples for smooth animation)
+      loadProgressiveSamples(location.id, newTimeframe, 50);
+      
+      summaryText = `تحميل البيانات...`;
+      changeText = `جاري تحميل ${newTimeframe.toLowerCase()}`;
+      changeDirection = 'positive';
     }
     
-    // Only show summary if we have real data - no fake summaries
+    // Update WebSocket subscription to new timeframe
+    updateLiveTimeframe(newTimeframe);
+    
+    // Subscribe to this specific location with the new timeframe for immediate data
+    subscribeToLocationWithTimeframe(location.id, newTimeframe);
+    
+    // For default/all-data locations, use regular loading
+    if (location.id === 'default' || location.id === 'all-data') {
+      await loadTimeframeData(newTimeframe);
+      
+      // Load chart data for new timeframe
+      if (showChart) {
+        loadChartData();
+      }
+    }
+    
+    console.log('✅ LiveCounter: Timeframe reset complete for:', newTimeframe);
+  }
+  
+  /**
+   * Load initial aggregated count for the selected timeframe period
+   * The WebSocket will provide timeframe-aware counts, so we just need to request fresh data
+   */
+  async function loadTimeframeData(timeframe) {
+    console.log('📊 LiveCounter: Loading timeframe data for:', location.id, 'timeframe:', timeframe);
+    
+    if (!location.id || location.id === 'default' || location.id === 'all-data') {
+      // For these cases, keep existing behavior
+      loadLocationData();
+      return;
+    }
+    
+    // Update summary text for the timeframe
+    const arabicTimeframes = {
+      'Hourly': 'الساعة الحالية',
+      'Daily': 'اليوم الحالي', 
+      'Weekly': 'الأسبوع الحالي',
+      'Monthly': 'الشهر الحالي'
+    };
+    
+    summaryText = `${arabicTimeframes[timeframe]} - ${location.name}`;
+    changeText = 'التحديثات المباشرة مع إجمالي الفترة';
+    changeDirection = 'positive';
+    
+    // The WebSocket will automatically send the correct timeframe-aware count
+    // So we just need to wait for it. In the meantime, load regular data.
+    loadLocationData();
+    
+    console.log('✅ LiveCounter: Timeframe reset complete, waiting for WebSocket data');
   }
   
   // Reactive updates
@@ -241,13 +496,19 @@
   </div>
   
   <div class="counter-display">
-    <span class="counter-value" class:loading={isLoading}>
-      {count.toLocaleString('en-US')}
-      {#if isLoading}
+    <span class="counter-value" class:loading={isLoading || isProgressiveLoading} class:animating={isProgressiveLoading}>
+      {isProgressiveLoading ? animatedCount.toLocaleString('en-US') : count.toLocaleString('en-US')}
+      {#if isLoading || isProgressiveLoading}
         <span class="loading-spinner">⟳</span>
       {/if}
     </span>
-    <span class="counter-label">إجمالي العدد</span>
+    <span class="counter-label">
+      {#if isProgressiveLoading}
+        جاري التحميل... 
+      {:else}
+        إجمالي العدد
+      {/if}
+    </span>
   </div>
   
   {#if showChart}

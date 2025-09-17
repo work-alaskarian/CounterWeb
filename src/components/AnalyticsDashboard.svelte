@@ -3,13 +3,19 @@
   import { onMount, onDestroy } from 'svelte';
   import Chart from 'chart.js/auto';
   import DataTable from './DataTable.svelte';
+  import ErrorBoundary from './ErrorBoundary.svelte';
+  import LoadingState from './LoadingState.svelte';
   import { 
     analyticsSummary,
     loadAnalyticsSummary,
     getAnalyticsChart,
     getHistoryData,
-    setupRealTimeUpdates
+    loadAllChartsData,
+    chartData,
+    cameras,
+    loadCameras
   } from '../lib/stores/analytics.js';
+  import analyticsAPI from '../lib/api/analytics.js';
   
   export let timeframe = 'Daily';
   
@@ -19,33 +25,96 @@
   let chartVisibility = {
     trafficChart: true,
     demographicsChart: true,
-    deviceChart: true,
-    revenueChart: true,
-    pagesChart: true
+    deviceChart: true
   };
   let isLoadingCharts = false;
-  let unsubscribeRealTime = null;
+  let initializationError = null;
+  let errorBoundary;
+  let isInitializing = false;
+  let hasInitialized = false;
+  let isVisible = false;
+  
+  // Component created - only show warnings and errors
+  
+  // Intersection Observer to detect when analytics section is visible
+  let analyticsSection;
   
   onMount(async () => {
-    // Load analytics summary
-    await loadAnalyticsSummary(mapTimeframe(timeframe));
+    // Find the analytics section
+    analyticsSection = document.getElementById('analytics');
     
-    // Setup real-time updates
-    unsubscribeRealTime = setupRealTimeUpdates();
-    
-    // Initialize charts
-    initializeCharts();
+    if (analyticsSection) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && !hasInitialized) {
+            isVisible = true;
+            initializeDashboard();
+          }
+        });
+      }, {
+        rootMargin: '100px' // Start loading 100px before the section becomes visible
+      });
+      
+      observer.observe(analyticsSection);
+      
+      return () => {
+        observer.disconnect();
+      };
+    } else {
+      // Fallback: initialize immediately if section not found
+      console.warn('⚠️ Analytics section not found, initializing immediately');
+      initializeDashboard();
+    }
   });
+  
+  async function initializeDashboard() {
+    if (hasInitialized) return;
+    
+    hasInitialized = true;
+    isInitializing = true;
+    
+    try {
+      // Load analytics summary
+      try {
+        await loadAnalyticsSummary(mapTimeframe(timeframe));
+      } catch (summaryError) {
+        console.error('❌ Failed to load analytics summary:', summaryError);
+      }
+      
+      // Load chart data
+      try {
+        await loadAllChartsData(mapTimeframe(timeframe));
+      } catch (chartError) {
+        console.error('❌ Failed to load chart data:', chartError);
+      }
+      
+      // Load cameras
+      try {
+        await loadCameras();
+      } catch (cameraError) {
+        console.error('❌ Failed to load cameras:', cameraError);
+      }
+      
+      // Initialize charts
+      try {
+        await initializeCharts();
+      } catch (chartInitError) {
+        console.error('❌ Chart initialization failed:', chartInitError);
+      }
+      
+    } catch (error) {
+      console.error('❌ AnalyticsDashboard: Initialization failed:', error);
+      initializationError = error;
+    } finally {
+      isInitializing = false;
+    }
+  }
 
   onDestroy(() => {
     // Clean up charts
     Object.values(charts).forEach(chart => {
       if (chart) chart.destroy();
     });
-    
-    if (unsubscribeRealTime) {
-      unsubscribeRealTime();
-    }
   });
 
   // Map timeframe to API format
@@ -60,14 +129,15 @@
   }
   
   async function initializeCharts() {
-    Chart.defaults.font.family = "'Cairo', 'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif";
-    Chart.defaults.font.size = 12;
-    
-    // Check for dark mode
-    const isDarkMode = document.documentElement.classList.contains('dark-mode');
-    Chart.defaults.color = isDarkMode ? '#e2e8f0' : '#2c3e50';
+    try {
+      Chart.defaults.font.family = "'Cairo', 'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif";
+      Chart.defaults.font.size = 12;
+      
+      // Check for dark mode
+      const isDarkMode = document.documentElement.classList.contains('dark-mode');
+      Chart.defaults.color = isDarkMode ? '#e2e8f0' : '#2c3e50';
 
-    const chartOptions = {
+      const chartOptions = {
       responsive: true,
       maintainAspectRatio: false,
       interaction: {
@@ -143,42 +213,81 @@
       }
     };
 
+    // Get real data from store, use fallback if empty
+    const visitorTrendsData = $chartData?.visitorTrends;
+    const locationDistributionData = $chartData?.locationDistribution;
+    const cameraPerformanceData = $chartData?.cameraPerformance;
+    
+    // Check for missing chart data
+    if (!visitorTrendsData?.labels?.length) {
+      console.warn('⚠️ No visitor trends data available');
+    }
+    if (!locationDistributionData?.labels?.length) {
+      console.warn('⚠️ No location distribution data available');
+    }
+    if (!cameraPerformanceData?.analytics_chart?.labels?.length) {
+      console.warn('⚠️ No camera performance data available');
+    }
+
+    // Show "No Data Available" when backend has no real data
+    const noDataVisitorChart = {
+      labels: ['لا توجد بيانات'],
+      datasets: [{
+        label: 'لا توجد بيانات متاحة',
+        data: [0],
+        borderColor: '#cccccc',
+        backgroundColor: 'rgba(204, 204, 204, 0.2)',
+        fill: true,
+        tension: 0.4
+      }]
+    };
+
+    const noDataLocationChart = {
+      labels: ['لا توجد بيانات'],
+      datasets: [{
+        data: [1],
+        backgroundColor: ['#cccccc'],
+        borderWidth: 0
+      }]
+    };
+
+    const noDataCameraChart = {
+      labels: ['لا توجد بيانات'],
+      datasets: [{
+        label: 'لا توجد بيانات متاحة',
+        data: [0],
+        backgroundColor: '#cccccc',
+        borderColor: '#cccccc',
+        borderWidth: 1
+      }]
+    };
+
     const chartConfigs = {
       trafficChart: { 
         type: 'line', 
-        data: { 
-          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'], 
-          datasets: [
-            { 
-              label: 'زوار الحرم', 
-              data: [1200, 1900, 1500, 2500, 2200, 3000, 3500], 
-              borderColor: '#16a085', 
-              backgroundColor: 'rgba(22, 160, 133, 0.2)', 
-              fill: true, 
-              tension: 0.4 
-            }, 
-            { 
-              label: 'الزوار الجدد', 
-              data: [800, 1200, 1000, 1800, 1600, 2200, 2600], 
-              borderColor: '#1abc9c', 
-              backgroundColor: 'rgba(26, 188, 156, 0.2)', 
-              fill: true, 
-              tension: 0.4 
-            }
-          ] 
-        }, 
+        data: (visitorTrendsData && visitorTrendsData.labels && visitorTrendsData.labels.length > 0) ? {
+          labels: visitorTrendsData.labels,
+          datasets: visitorTrendsData.datasets.map((dataset, index) => ({
+            label: dataset.label || (index === 0 ? 'زوار الحرم' : 'الزوار الجدد'),
+            data: dataset.data || [],
+            borderColor: index === 0 ? '#16a085' : '#1abc9c',
+            backgroundColor: index === 0 ? 'rgba(22, 160, 133, 0.2)' : 'rgba(26, 188, 156, 0.2)',
+            fill: true,
+            tension: 0.4
+          }))
+        } : noDataVisitorChart, 
         options: chartOptions 
       },
       demographicsChart: { 
         type: 'doughnut', 
-        data: { 
-                    labels: ['18-24', '25-34', '35-44', '45+'],  
+        data: (locationDistributionData && locationDistributionData.labels && locationDistributionData.labels.length > 0) ? {
+          labels: locationDistributionData.labels,
           datasets: [{
-            data: [30, 40, 20, 10], 
-            backgroundColor: ['#16a085', '#1abc9c', '#48c9b0', '#76d7c4'], 
+            data: locationDistributionData.datasets?.[0]?.data || [0], 
+            backgroundColor: ['#16a085', '#1abc9c', '#48c9b0', '#76d7c4', '#85c1e9', '#f7dc6f', '#bb8fce'], 
             borderWidth: 0 
           }] 
-        }, 
+        } : noDataLocationChart, 
         options: { 
           responsive: true, 
           maintainAspectRatio: false, 
@@ -221,15 +330,17 @@
         } 
       },
       deviceChart: { 
-        type: 'pie', 
-        data: { 
-          labels: ['مدخل رئيسي', 'مدخل شرقي', 'مدخل غربي'], 
+        type: 'bar', 
+        data: (cameraPerformanceData?.analytics_chart && cameraPerformanceData.analytics_chart.labels && cameraPerformanceData.analytics_chart.labels.length > 0) ? {
+          labels: cameraPerformanceData.analytics_chart.labels,
           datasets: [{
-            data: [55, 35, 10], 
-            backgroundColor: ['#16a085', '#1abc9c', '#48c9b0'], 
-            borderWidth: 0 
+            label: 'إجمالي الإكتشافات',
+            data: cameraPerformanceData.analytics_chart.datasets?.[0]?.data || [0], 
+            backgroundColor: '#16a085',
+            borderColor: '#16a085',
+            borderWidth: 1 
           }] 
-        }, 
+        } : noDataCameraChart, 
         options: { 
           responsive: true, 
           maintainAspectRatio: false, 
@@ -270,41 +381,15 @@
             }
           } 
         } 
-      },
-      revenueChart: { 
-        type: 'bar', 
-        data: { 
-          labels: ['الربع الأول', 'الربع الثاني', 'الربع الثالث', 'الربع الرابع'], 
-          datasets: [{
-                        label: 'إجمالي الزوار (الآلاف)',  
-            data: [65, 78, 89, 95], 
-            backgroundColor: 'rgba(22, 160, 133, 0.8)', 
-            borderColor: '#16a085', 
-            borderWidth: 1, 
-            borderRadius: 8 
-          }] 
-        }, 
-        options: chartOptions 
-      },
-      pagesChart: { 
-        type: 'bar', 
-        data: { 
-                    labels: ['الصحن الشريف', 'قاعة الصلاة', 'المرافق الخدمية', 'المواقف'],  
-          datasets: [{
-                        label: 'كثافة الزوار',  
-            data: [1500, 1200, 800, 500], 
-            backgroundColor: 'rgba(26, 188, 156, 0.8)', 
-            borderColor: '#1abc9c', 
-            borderWidth: 1, 
-            borderRadius: 8 
-          }] 
-        }, 
-        options: { ...chartOptions, indexAxis: 'y' } 
       }
     };
 
-    // Load real data for charts and create them
-    await loadChartsWithRealData(chartConfigs, chartOptions, isDarkMode);
+      // Load real data for charts and create them
+      await loadChartsWithRealData(chartConfigs, chartOptions, isDarkMode);
+    } catch (error) {
+      console.error('❌ Chart initialization failed:', error);
+      throw error;
+    }
   }
 
   /**
@@ -314,34 +399,56 @@
     isLoadingCharts = true;
     
     try {
-      // Load traffic chart with real data
-      const trafficData = await getAnalyticsChart('traffic', mapTimeframe(timeframe));
-      if (trafficData) {
+      // Load visitor trends chart with real data
+      const visitorTrendsData = await getAnalyticsChart('visitors_over_time', mapTimeframe(timeframe));
+      if (visitorTrendsData && visitorTrendsData.labels && visitorTrendsData.datasets) {
         chartConfigs.trafficChart.data = {
-          labels: trafficData.labels,
-          datasets: trafficData.datasets.map(dataset => ({
+          labels: visitorTrendsData.labels,
+          datasets: visitorTrendsData.datasets.map((dataset, index) => ({
             ...dataset,
-            borderColor: '#16a085',
-            backgroundColor: 'rgba(22, 160, 133, 0.2)',
+            borderColor: index === 0 ? '#16a085' : '#1abc9c',
+            backgroundColor: index === 0 ? 'rgba(22, 160, 133, 0.2)' : 'rgba(26, 188, 156, 0.2)',
             fill: true,
             tension: 0.4
           }))
         };
+      } else {
+        // Use fallback empty data structure
+        chartConfigs.trafficChart.data = {
+          labels: ['لا توجد بيانات'],
+          datasets: [{
+            label: 'الزوار',
+            data: [0],
+            borderColor: '#16a085',
+            backgroundColor: 'rgba(22, 160, 133, 0.2)',
+            fill: true
+          }]
+        };
       }
 
-      // Load other charts with real data or fallback to mock
-      const chartTypes = ['demographics', 'device', 'revenue', 'pages'];
-      await Promise.all(chartTypes.map(async (type) => {
+      // Load location distribution and device analytics if available  
+      const supportedChartTypes = ['location_distribution', 'device_stats'];
+      await Promise.all(supportedChartTypes.map(async (type) => {
         try {
           const data = await getAnalyticsChart(type, mapTimeframe(timeframe));
-          if (data && chartConfigs[`${type}Chart`]) {
-            chartConfigs[`${type}Chart`].data = {
-              labels: data.labels,
-              datasets: data.datasets
+          if (data && data.labels && data.datasets) {
+            // Map to existing chart names if they exist
+            const chartMapping = {
+              'location_distribution': 'demographicsChart',
+              'device_stats': 'deviceChart'
             };
+            
+            const chartKey = chartMapping[type];
+            if (chartKey && chartConfigs[chartKey]) {
+              chartConfigs[chartKey].data = {
+                labels: data.labels,
+                datasets: data.datasets
+              };
+              // Successfully loaded chart data
+            }
           }
         } catch (error) {
-          console.log(`Using fallback data for ${type} chart:`, error.message);
+          console.warn(`⚠️ Using no-data placeholder for ${type} chart:`, error.message);
         }
       }));
 
@@ -349,10 +456,15 @@
       console.error('Failed to load chart data:', error);
     }
 
-    // Create all charts
+    // Create all charts - destroy existing first
     Object.keys(chartConfigs).forEach(id => {
       const canvas = document.getElementById(id);
       if (canvas) {
+        // Destroy existing chart if it exists
+        if (charts[id]) {
+          charts[id].destroy();
+        }
+        
         charts[id] = new Chart(canvas, chartConfigs[id]);
       }
     });
@@ -377,7 +489,7 @@
   }
   
   function handleDataExport(event) {
-    console.log('Exporting data:', event.detail);
+    // Export data silently
   }
 
   // Reactive statements to handle timeframe changes
@@ -404,6 +516,19 @@
   <title>لوحة تحكم التحليلات</title>
 </svelte:head>
 
+<ErrorBoundary 
+  bind:this={errorBoundary}
+  errorMessage="حدث خطأ في تحميل لوحة التحكم"
+  showRetry={false}
+  on:error={(event) => console.error('Dashboard Error:', event.detail)}
+>
+
+{#if isInitializing}
+  <LoadingState 
+    variant="overlay" 
+    message="جاري تحميل لوحة تحكم التحليلات..."
+  />
+{:else}
 
 {#if showCustomizeModal}
   <div class="customize-modal" on:click={toggleCustomizeModal} on:keydown={(e) => e.key === 'Escape' && toggleCustomizeModal()} role="dialog" tabindex="-1">
@@ -553,43 +678,6 @@
     </div>
   {/if}
 
-  {#if chartVisibility.revenueChart}
-    <div class="chart-card">
-      <div class="chart-header">
-        <div>
-          <div class="chart-title">
-            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
-            </svg>
-            إحصائيات الزوار الفصلية
-          </div>
-          <div class="chart-subtitle">إجمالي الزوار على مدار أرباع السنة</div>
-        </div>
-      </div>
-      <div class="chart-container">
-        <canvas id="revenueChart"></canvas>
-      </div>
-    </div>
-  {/if}
-
-  {#if chartVisibility.pagesChart}
-    <div class="chart-card">
-      <div class="chart-header">
-        <div>
-          <div class="chart-title">
-            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-            كثافة الزوار حسب المناطق
-          </div>
-          <div class="chart-subtitle">توزيع الزوار في مختلف مناطق الحرم</div>
-        </div>
-      </div>
-      <div class="chart-container">
-        <canvas id="pagesChart"></canvas>
-      </div>
-    </div>
-  {/if}
 </div>
 {:else}
   <DataTable 
@@ -597,4 +685,7 @@
     on:export={handleDataExport}
   />
 {/if}
+
+{/if}
+</ErrorBoundary>
 

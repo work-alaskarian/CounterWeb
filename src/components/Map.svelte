@@ -1,9 +1,10 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, createEventDispatcher } from 'svelte';
   import 'leaflet/dist/leaflet.css';
   import L from 'leaflet';
 
   let mapContainer;
+  const dispatch = createEventDispatcher();
 
   function tile2latlon(x, y, z) {
     const n = Math.pow(2, z);
@@ -57,7 +58,6 @@
     });
 
     // Dispatch mousemove events
-    const dispatch = createEventDispatcher();
     map.on('mousemove', function (e) {
       dispatch('mapmousemove', { latlng: e.latlng });
     });

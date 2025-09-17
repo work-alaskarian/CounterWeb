@@ -5,12 +5,12 @@ echo "======================================================"
 
 # Check if analytics server is running
 echo "🔍 Checking Analytics Server..."
-if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-    echo "✅ Analytics server is running at http://localhost:8000"
+if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+    echo "✅ Analytics server is running at http://localhost:8080"
     
     # Test GraphQL endpoint
     echo "🔍 Testing GraphQL endpoint..."
-    GRAPHQL_RESPONSE=$(curl -s -X POST http://localhost:8000/graphql \
+    GRAPHQL_RESPONSE=$(curl -s -X POST http://localhost:8080/graphql \
         -H "Content-Type: application/json" \
         -d '{"query":"query { allLocations { id name liveCount } }"}')
     
@@ -27,9 +27,9 @@ if curl -s http://localhost:8000/health > /dev/null 2>&1; then
     echo "🔍 Testing WebSocket endpoint..."
     if command -v wscat > /dev/null 2>&1; then
         echo "✅ WebSocket test tool (wscat) is available"
-        echo "🔗 WebSocket should be available at ws://localhost:8000/ws/analytics"
+        echo "🔗 WebSocket should be available at ws://localhost:8080/ws/analytics"
     else
-        echo "⚠️ wscat not found, but WebSocket endpoint should be available at ws://localhost:8000/ws/analytics"
+        echo "⚠️ wscat not found, but WebSocket endpoint should be available at ws://localhost:8080/ws/analytics"
     fi
     
     echo ""

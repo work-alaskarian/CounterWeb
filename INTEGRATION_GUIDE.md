@@ -64,7 +64,7 @@ npm run dev
 ## 🔌 Real-time Features
 
 ### WebSocket Integration
-- ✅ Auto-connects to `ws://localhost:8000/ws/analytics`
+- ✅ Auto-connects to `ws://localhost:8080/ws/analytics`
 - ✅ Receives live count updates
 - ✅ Updates UI immediately when data changes
 - ✅ Automatic reconnection on connection loss
@@ -122,9 +122,9 @@ The new test component provides:
 ## 🛠️ Technical Details
 
 ### Port Configuration
-- **Analytics API**: `localhost:8000`
+- **Analytics API**: `localhost:8080`
 - **Web Application**: `localhost:5000` (development)
-- **WebSocket**: `ws://localhost:8000/ws/analytics`
+- **WebSocket**: `ws://localhost:8080/ws/analytics`
 
 ### Data Synchronization
 - Real-time updates via WebSocket
@@ -163,15 +163,15 @@ Watch for these messages:
 ### Debug Commands
 ```bash
 # Test analytics server
-curl http://localhost:8000/health
+curl http://localhost:8080/health
 
 # Test GraphQL
-curl -X POST http://localhost:8000/graphql \
+curl -X POST http://localhost:8080/graphql \
   -H "Content-Type: application/json" \
   -d '{"query":"query { allLocations { id name liveCount } }"}'
 
 # Test WebSocket (if wscat installed)
-wscat -c ws://localhost:8000/ws/analytics
+wscat -c ws://localhost:8080/ws/analytics
 ```
 
 Your CounterWeb application is now fully integrated with the new analytics system! 🎊

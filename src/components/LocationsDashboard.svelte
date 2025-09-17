@@ -28,19 +28,19 @@
   const theme = { color: '#16a085', rgb: '22, 160, 133' };
   
   const availableLocations = [
-    { id: 'northern-gate', name: 'البوابة الشمالية', initialCount: 800 },
-    { id: 'southern-gate', name: 'البوابة الجنوبية', initialCount: 600 },
-    { id: 'first-floor-shrine', name: 'الطابق الأول للحرم', initialCount: 1100 },
-    { id: 'third-floor-shrine', name: 'الطابق الثالث للحرم', initialCount: 400 },
-    { id: 'basement-shrine', name: 'قبو الحرم', initialCount: 200 },
-    { id: 'rooftop-shrine', name: 'سطح الحرم', initialCount: 150 },
-    { id: 'pilgrimage-parking', name: 'موقف الزوار', initialCount: 300 },
-    { id: 'visitor-parking', name: 'موقف الحجاج', initialCount: 250 },
-    { id: 'shrine-garden', name: 'حديقة الحرم', initialCount: 500 },
-    { id: 'womens-section', name: 'قسم النساء', initialCount: 350 },
-    { id: 'library-shrine', name: 'مكتبة الحرم', initialCount: 180 },
-    { id: 'dining-area', name: 'منطقة الطعام', initialCount: 450 },
-    { id: 'lecture-hall', name: 'قاعة المحاضرات', initialCount: 120 }
+    { id: 'northern-gate', name: 'البوابة الشمالية', initialCount: 0 },
+    { id: 'southern-gate', name: 'البوابة الجنوبية', initialCount: 0 },
+    { id: 'first-floor-shrine', name: 'الطابق الأول للحرم', initialCount: 0 },
+    { id: 'third-floor-shrine', name: 'الطابق الثالث للحرم', initialCount: 0 },
+    { id: 'basement-shrine', name: 'قبو الحرم', initialCount: 0 },
+    { id: 'rooftop-shrine', name: 'سطح الحرم', initialCount: 0 },
+    { id: 'pilgrimage-parking', name: 'موقف الزوار', initialCount: 0 },
+    { id: 'visitor-parking', name: 'موقف الحجاج', initialCount: 0 },
+    { id: 'shrine-garden', name: 'حديقة الحرم', initialCount: 0 },
+    { id: 'womens-section', name: 'قسم النساء', initialCount: 0 },
+    { id: 'library-shrine', name: 'مكتبة الحرم', initialCount: 0 },
+    { id: 'dining-area', name: 'منطقة الطعام', initialCount: 0 },
+    { id: 'lecture-hall', name: 'قاعة المحاضرات', initialCount: 0 }
   ];
   
   function handleTimeframeChange(event) {
@@ -60,7 +60,7 @@
       await addLocation(location);
       closeAddModal();
     } catch (error) {
-      console.error('Failed to add location:', error);
+      console.error('❌ LocationsDashboard: Failed to add location:', error);
       alert('فشل في إضافة الموقع: ' + error.message);
     }
   }
@@ -72,14 +72,14 @@
       const newLocation = {
         id: newId,
         name: locationName,
-        initialCount: Math.floor(Math.random() * 800) + 200
+        initialCount: 0  // Start with 0 instead of random count
       };
       
       try {
         await addLocation(newLocation);
         closeAddModal();
       } catch (error) {
-        console.error('Failed to add custom location:', error);
+        console.error('❌ LocationsDashboard: Failed to add custom location:', error);
         alert('فشل في إضافة الموقع المخصص: ' + error.message);
       }
     }
@@ -90,7 +90,7 @@
       try {
         await removeLocationFromAPI(locationId);
       } catch (error) {
-        console.error('Failed to remove location:', error);
+        console.error('❌ LocationsDashboard: Failed to remove location:', error);
         alert('فشل في حذف الموقع: ' + error.message);
       }
     }
@@ -98,13 +98,17 @@
 
   // Component lifecycle
   onMount(async () => {
-    // Load locations from API first, then setup real-time
-    await loadLocations();
-    
-    // Small delay to ensure store is populated
-    setTimeout(() => {
-      unsubscribeRealTime = setupRealTimeUpdates();
-    }, 100);
+    try {
+      // Load locations from API first, then setup real-time
+      await loadLocations();
+      
+      // Small delay to ensure store is populated
+      setTimeout(() => {
+        unsubscribeRealTime = setupRealTimeUpdates();
+      }, 100);
+    } catch (error) {
+      console.error('❌ LocationsDashboard: Initialization failed:', error);
+    }
   });
 
   onDestroy(() => {

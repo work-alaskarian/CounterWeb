@@ -3,7 +3,7 @@
 	import LocationsDashboard from './components/LocationsDashboard.svelte';
 	import AnalyticsDashboard from './components/AnalyticsDashboard.svelte';
 	import Map from './components/Map.svelte';
-	import NewAnalyticsTest from './components/NewAnalyticsTest.svelte';
+	import WebSocketLog from './components/WebSocketLog.svelte';
 	// import CoordinatesDisplay from './components/CoordinatesDisplay.svelte';
 
 	let currentPage = 'live-counter';
@@ -14,7 +14,6 @@
 		{ id: 'live-counter', name: 'العداد المباشر', icon: 'analytics' },
 		{ id: 'locations', name: 'مواقع متعددة', icon: 'location_on' },
 		{ id: 'analytics', name: 'لوحة تحكم التحليلات', icon: 'dashboard' },
-		{ id: 'new-analytics', name: 'اختبار النظام الجديد', icon: 'science' },
 		{ id: 'map', name: 'الخريطة', icon: 'map' }
 	];
 
@@ -33,7 +32,7 @@
 
 	// Track scroll position to update active section
 	function handleScroll() {
-		const sections = ['hero', 'live-counter', 'locations', 'analytics', 'new-analytics'];
+		const sections = ['hero', 'live-counter', 'locations', 'analytics'];
 		let currentSection = 'hero';
 		
 		for (const sectionId of sections) {
@@ -59,41 +58,69 @@
 		localStorage.setItem('darkMode', isDarkMode);
 	}
 
+	// Timeframe change function
+	function changeTimeframe(newTimeframe) {
+		timeframe = newTimeframe;
+		localStorage.setItem('timeframe', newTimeframe);
+		
+		// Update live WebSocket timeframe for real-time updates
+		updateLiveTimeframe(newTimeframe);
+		
+		console.log(`📅 Timeframe changed to: ${newTimeframe} (saved to localStorage)`);
+	}
+
 	// Add scroll listener
 	import { onMount, onDestroy } from 'svelte';
 	import { 
-		refreshAllData, 
-		startAutoRefresh, 
-		stopAutoRefresh,
-		setupRealTimeUpdates
+		setupRealTimeUpdates,
+		updateLiveTimeframe
 	} from './lib/stores/analytics.js';
 	
 	let unsubscribeRealTime = null;
 	
 	onMount(async () => {
+		console.log('🔄 CounterWeb App mounting...', {
+			timestamp: new Date().toISOString(),
+			location: window.location.href,
+			userAgent: navigator.userAgent.substring(0, 50) + '...'
+		});
+
 		// Check for saved dark mode preference
 		const savedDarkMode = localStorage.getItem('darkMode') === 'true';
 		if (savedDarkMode) {
 			isDarkMode = true;
 			document.documentElement.classList.add('dark-mode');
+			console.log('🌙 Dark mode enabled from localStorage');
 		}
 
-		// Initialize analytics data
-		console.log('🚀 Initializing CounterWeb with real-time analytics...');
+		// Check for saved timeframe preference
+		const savedTimeframe = localStorage.getItem('timeframe');
+		if (savedTimeframe && timeframes.includes(savedTimeframe)) {
+			timeframe = savedTimeframe;
+			console.log(`⏰ Timeframe loaded from localStorage: ${timeframe}`);
+		}
+
+		// Only setup global real-time WebSocket connection
+		console.log('🔧 Environment check:', {
+			hasLocalStorage: typeof localStorage !== 'undefined',
+			hasWebSocket: typeof WebSocket !== 'undefined',
+			hasFetch: typeof fetch !== 'undefined',
+			online: navigator.onLine
+		});
 		
 		try {
-			// Load initial data
-			await refreshAllData();
+			console.log('⏰ Setting up global real-time WebSocket connection...');
 			
-			// Setup real-time updates
-			unsubscribeRealTime = setupRealTimeUpdates();
+			// Set initial timeframe for WebSocket
+			updateLiveTimeframe(timeframe);
 			
-			// Start auto-refresh
-			startAutoRefresh(30000); // Every 30 seconds
+			unsubscribeRealTime = setupRealTimeUpdates(timeframe);
+			console.log('✅ Global real-time connection setup complete');
 			
-			console.log('✅ CounterWeb analytics integration ready!');
+			console.log('✅ CounterWeb app ready! Components will load their own data.');
 		} catch (error) {
-			console.error('❌ Failed to initialize analytics:', error);
+			console.error('❌ Failed to setup WebSocket:', error);
+			console.log('⚠️ Components will work without real-time updates');
 		}
 
 		window.addEventListener('scroll', handleScroll);
@@ -106,12 +133,11 @@
 		if (unsubscribeRealTime) {
 			unsubscribeRealTime();
 		}
-		stopAutoRefresh();
 	});
 
 	// Props for the single LiveCounter (formerly LocationCard)
-	// Use the main entrance location for the hero display - no fake initialCount
-	const mainLocation = { id: 'main-entrance', name: 'المدخل الرئيسي' };
+	// Use all data combined for the hero display - shows total from all regional locations
+	const mainLocation = { id: 'all-data', name: 'جميع البيانات' };
 	const displayTheme = { color: '#16a085', rgb: '22, 160, 133' };
 	let displayTimeframe = 'Hourly'; // Can be made reactive if needed
 
@@ -141,7 +167,7 @@
 				{#each timeframes as tf}
 					<button
 						class="timeframe-btn {timeframe === tf ? 'active' : ''}"
-						on:click={() => timeframe = tf}
+						on:click={() => changeTimeframe(tf)}
 					>
 						{tf === 'Hourly' ? 'ساعي' : tf === 'Daily' ? 'يومي' : tf === 'Weekly' ? 'أسبوعي' : 'شهري'}
 					</button>
@@ -219,14 +245,6 @@
 			<AnalyticsDashboard {timeframe} />
 		</section>
 
-		<!-- New Analytics Test Section -->
-		<section id="new-analytics" class="section">
-			<div class="section-header">
-				<h2 class="section-title">اختبار النظام الجديد</h2>
-				<p class="section-subtitle">اختبار شامل للنظام التحليلي الجديد مع البيانات المباشرة</p>
-			</div>
-			<NewAnalyticsTest />
-		</section>
 
 		<!-- Map Section -->
 		<section id="map" class="section">
@@ -237,6 +255,9 @@
 			<Map on:mapmousemove={e => mouseCoords = e.detail.latlng} />
 		</section>
 	</main>
+	
+	<!-- WebSocket Message Log (floating component) -->
+	<WebSocketLog />
 </div>
 
 <style>

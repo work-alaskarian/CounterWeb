@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Dashboard Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { display: flex; gap: 20px; }
+        .dashboard { border: 2px solid #ccc; padding: 20px; flex: 1; min-height: 400px; }
+        .analytics { border-color: #007bff; }
+        .counterweb { border-color: #28a745; }
+        .log { background: #f8f9fa; padding: 10px; margin: 10px 0; border-left: 4px solid #007bff; max-height: 200px; overflow-y: auto; }
+        .status { padding: 5px 10px; margin: 5px 0; border-radius: 4px; }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .count { font-size: 24px; font-weight: bold; color: #007bff; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>🔴 Real-time Dashboard Test</h1>
+    <p>This page tests both dashboards' WebSocket connections simultaneously.</p>
+    
+    <div style="margin-bottom: 20px;">
+        <button onclick="updateCount(15)">Set Count to 15</button>
+        <button onclick="updateCount(20)">Set Count to 20</button>
+        <button onclick="updateCount(25)">Set Count to 25</button>
+        <button onclick="updateCount(Math.floor(Math.random() * 100))">Random Count</button>
+    </div>
+
+    <div class="container">
+        <!-- Analytics Dashboard Simulation -->
+        <div class="dashboard analytics">
+            <h2>📊 Analytics Dashboard</h2>
+            <div id="analytics-status" class="status disconnected">Disconnected</div>
+            <div>Main Entrance Count: <span id="analytics-count" class="count">-</span></div>
+            <div>Last Update: <span id="analytics-time">-</span></div>
+            <div class="log" id="analytics-log">
+                <strong>Analytics Dashboard Log:</strong><br>
+            </div>
+        </div>
+
+        <!-- CounterWeb Dashboard Simulation -->
+        <div class="dashboard counterweb">
+            <h2>🌐 CounterWeb Dashboard</h2>
+            <div id="counterweb-status" class="status disconnected">Disconnected</div>
+            <div>Main Entrance Count: <span id="counterweb-count" class="count">-</span></div>
+            <div>Last Update: <span id="counterweb-time">-</span></div>
+            <div class="log" id="counterweb-log">
+                <strong>CounterWeb Dashboard Log:</strong><br>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Analytics Dashboard WebSocket (matches existing dashboard)
+        let analyticsWS = null;
+        let counterwebWS = null;
+
+        function log(dashboardId, message) {
+            const logElement = document.getElementById(dashboardId + '-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(dashboardId, connected) {
+            const statusElement = document.getElementById(dashboardId + '-status');
+            statusElement.textContent = connected ? 'Connected' : 'Disconnected';
+            statusElement.className = 'status ' + (connected ? 'connected' : 'disconnected');
+        }
+
+        function updateCount(dashboardId, count) {
+            document.getElementById(dashboardId + '-count').textContent = count;
+            document.getElementById(dashboardId + '-time').textContent = new Date().toLocaleTimeString();
+        }
+
+        // Initialize Analytics Dashboard WebSocket
+        function initAnalyticsWS() {
+            log('analytics', '🔗 Connecting to Analytics WebSocket...');
+            analyticsWS = new WebSocket('ws://localhost:8080/ws/analytics');
+
+            analyticsWS.onopen = () => {
+                log('analytics', '✅ Connected successfully');
+                updateStatus('analytics', true);
+                
+                // Subscribe to main entrance
+                analyticsWS.send(JSON.stringify({
+                    action: 'subscribe',
+                    topics: ['live_count_updates'],
+                    timestamp: new Date().toISOString()
+                }));
+                log('analytics', '📡 Subscribed to live count updates');
+            };
+
+            analyticsWS.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log('analytics', `📨 Message: ${JSON.stringify(data)}`);
+                    
+                    if (data.type === 'live_count_update' && data.location_id === 'main-entrance') {
+                        updateCount('analytics', data.live_count);
+                        log('analytics', `🔔 Count updated: ${data.live_count}`);
+                    }
+                } catch (error) {
+                    log('analytics', `❌ Parse error: ${error.message}`);
+                }
+            };
+
+            analyticsWS.onclose = () => {
+                log('analytics', '🔌 Connection closed');
+                updateStatus('analytics', false);
+                setTimeout(initAnalyticsWS, 3000); // Reconnect
+            };
+
+            analyticsWS.onerror = (error) => {
+                log('analytics', `❌ Error: ${error.message}`);
+            };
+        }
+
+        // Initialize CounterWeb WebSocket (matches CounterWeb implementation)
+        function initCounterWebWS() {
+            log('counterweb', '🔗 Connecting to CounterWeb WebSocket...');
+            counterwebWS = new WebSocket('ws://localhost:8080/ws/analytics');
+
+            counterwebWS.onopen = () => {
+                log('counterweb', '✅ Connected successfully');
+                updateStatus('counterweb', true);
+                
+                // Subscribe like CounterWeb does
+                counterwebWS.send(JSON.stringify({
+                    action: 'subscribe',
+                    locationId: 'main-entrance'
+                }));
+                log('counterweb', '📡 Subscribed to main-entrance');
+            };
+
+            counterwebWS.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log('counterweb', `📨 Message: ${JSON.stringify(data)}`);
+                    
+                    if (data.type === 'live_count_update' && data.location_id === 'main-entrance') {
+                        updateCount('counterweb', data.live_count);
+                        log('counterweb', `🔔 Count updated: ${data.live_count}`);
+                    }
+                } catch (error) {
+                    log('counterweb', `❌ Parse error: ${error.message}`);
+                }
+            };
+
+            counterwebWS.onclose = () => {
+                log('counterweb', '🔌 Connection closed');
+                updateStatus('counterweb', false);
+                setTimeout(initCounterWebWS, 3000); // Reconnect
+            };
+
+            counterwebWS.onerror = (error) => {
+                log('counterweb', `❌ Error: ${error.message}`);
+            };
+        }
+
+        // Update count via GraphQL mutation
+        async function updateCount(newCount) {
+            try {
+                log('analytics', `🔄 Updating count to ${newCount}...`);
+                log('counterweb', `🔄 Updating count to ${newCount}...`);
+                
+                const response = await fetch('http://localhost:8080/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: `mutation { updateLocationCount(locationId: "main-entrance", count: ${newCount}) { id liveCount } }`
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.data) {
+                    log('analytics', `✅ GraphQL update successful: ${result.data.updateLocationCount.liveCount}`);
+                    log('counterweb', `✅ GraphQL update successful: ${result.data.updateLocationCount.liveCount}`);
+                } else {
+                    log('analytics', `❌ GraphQL error: ${JSON.stringify(result.errors)}`);
+                    log('counterweb', `❌ GraphQL error: ${JSON.stringify(result.errors)}`);
+                }
+            } catch (error) {
+                log('analytics', `❌ Update failed: ${error.message}`);
+                log('counterweb', `❌ Update failed: ${error.message}`);
+            }
+        }
+
+        // Initialize both connections
+        initAnalyticsWS();
+        initCounterWebWS();
+
+        // Auto-test every 10 seconds
+        setInterval(() => {
+            const randomCount = Math.floor(Math.random() * 50) + 10;
+            updateCount(randomCount);
+        }, 10000);
+    </script>
+</body>
+</html>
