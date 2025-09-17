@@ -22,8 +22,20 @@
   // Start with empty data, only use real data from API
   let locationsData = [];
 
-  // Reactive update from store - only use real API data
-  $: locationsData = $locations || [];
+  // Reactive update from store - only use real API data and deduplicate
+  $: locationsData = ($locations || []).reduce((unique, location, index) => {
+    // Create unique key by combining id with index to handle duplicates
+    const uniqueLocation = {
+      ...location,
+      uniqueKey: `${location.id}_${index}_${location.name || 'unnamed'}`
+    };
+    
+    // Deduplicate by ID - only keep the first occurrence
+    if (!unique.find(loc => loc.id === location.id)) {
+      unique.push(uniqueLocation);
+    }
+    return unique;
+  }, []);
   
   const theme = { color: '#16a085', rgb: '22, 160, 133' };
   
@@ -165,15 +177,21 @@
     <div class="loading-spinner">⟳</div>
     <p>جاري تحميل البيانات...</p>
   </div>
-{:else if $error}
+{:else if $error && locationsData.length === 0}
   <div class="error-state">
     <div class="error-icon">⚠️</div>
     <p>خطأ في تحميل البيانات: {$error}</p>
     <button on:click={loadLocations}>إعادة المحاولة</button>
   </div>
+{:else if locationsData.length === 0 && !$isLoading}
+  <div class="empty-state">
+    <div class="empty-icon">📍</div>
+    <p>لا توجد مواقع متاحة</p>
+    <p>اضغط على زر إضافة منطقة لإنشاء موقع جديد</p>
+  </div>
 {:else}
   <div class="dashboard-grid" style="grid-template-columns: {gridColumns}">
-    {#each locationsData as location (location.id)}
+    {#each locationsData as location (location.uniqueKey || location.id)}
       <div class="location-wrapper">
         {#if $customization.showCustomization}
           <button class="remove-btn" on:click={() => removeLocation(location.id)} title="حذف الموقع">×</button>

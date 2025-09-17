@@ -4,6 +4,7 @@
 	import AnalyticsDashboard from './components/AnalyticsDashboard.svelte';
 	import Map from './components/Map.svelte';
 	import WebSocketLog from './components/WebSocketLog.svelte';
+	import ConnectionBanner from './components/ConnectionBanner.svelte';
 	// import CoordinatesDisplay from './components/CoordinatesDisplay.svelte';
 
 	let currentPage = 'live-counter';
@@ -144,6 +145,9 @@
 </script>
 
 <div class="app">
+	<!-- Connection Status Banner -->
+	<ConnectionBanner />
+	
 	<!-- Navigation Header -->
 	<header class="navigation-header">
 		<div class="brand">

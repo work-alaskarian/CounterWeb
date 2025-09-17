@@ -14,13 +14,6 @@ export const isLoading = writable(false);
 export const error = writable(null);
 export const connectionStatus = writable('disconnected'); // 'connected', 'disconnected', 'connecting'
 
-// WebSocket fallback system
-export const websocketHealthy = writable(true);
-export const fallbackMode = writable(false);
-export const fallbackReason = writable(null);
-export const lastWebSocketAttempt = writable(null);
-export const nextRetryTime = writable(null);
-
 // WebSocket message log store for UI display
 export const webSocketMessages = writable([]);
 
@@ -446,37 +439,6 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
         analyticsSummary.set(data.data);
       }
       
-    } else if (data.type === 'chart_data_update') {
-      // Handle real-time chart data updates
-      console.log(`📈 Chart data update: ${data.location_id}`, data.chart_data);
-      
-      // Dispatch custom event for Chart components to handle real-time updates
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('chartDataUpdate', {
-          detail: {
-            locationId: data.location_id,
-            chartData: data.chart_data,
-            timestamp: data.timestamp
-          }
-        }));
-      }
-      
-    } else if (data.type === 'chart_data_response') {
-      // Handle chart data response from WebSocket requests
-      console.log(`📊 Chart data response: ${data.location_id}`, data.chart_data);
-      
-      // Dispatch custom event for Chart components
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('chartDataResponse', {
-          detail: {
-            locationId: data.location_id,
-            timeframe: data.timeframe,
-            chartData: data.chart_data,
-            timestamp: data.timestamp
-          }
-        }));
-      }
-      
     } else if (data.type === 'live_count_update') {
       // Handle WebSocket live count updates from backend
       
@@ -494,21 +456,7 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
       
     } else if (data.event === 'pong') {
       // Handle ping/pong for connection health
-      websocketHealthy.set(true);
-      
-    } else if (data.event === 'websocketDisconnected') {
-      // Handle WebSocket disconnection
-      console.warn(`🔌 WebSocket disconnected: ${data.reason} (code: ${data.code})`);
-      websocketHealthy.set(false);
-      fallbackMode.set(true);
-      fallbackReason.set(`Connection lost: ${data.reason || 'Unknown error'}`);
-      
-    } else if (data.event === 'connectionFailed') {
-      // Handle permanent connection failure
-      console.error('🚨 WebSocket connection failed permanently');
-      websocketHealthy.set(false);
-      fallbackMode.set(true);
-      fallbackReason.set(data.maxAttemptsReached ? 'Max retry attempts reached' : 'Connection failed');
+      // WebSocket ping response received
     } else if (data.type === 'progressive_sample') {
       // Handle progressive sample loading for smooth animation
       console.log(`📈 Progressive sample: ${data.location_id} (${data.sample_index}/${data.total_samples}) count: ${data.current_count}`);
@@ -557,6 +505,70 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
     } else if (data.type === 'progressive_loading_error') {
       // Handle progressive loading errors
       console.error(`❌ Progressive loading error: ${data.location_id}`, data.error);
+      
+    } else if (data.type === 'initial_locations') {
+      // Handle initial locations data from WebSocket
+      console.log('📍 Received initial locations via WebSocket:', data.locations.length);
+      locations.set(data.locations);
+      
+    } else if (data.type === 'initial_cameras') {
+      // Handle initial cameras data from WebSocket
+      console.log('📹 Received initial cameras via WebSocket:', data.cameras.length);
+      cameras.set(data.cameras);
+      
+    } else if (data.type === 'initial_analytics_summary') {
+      // Handle initial analytics summary from WebSocket
+      console.log('📊 Received initial analytics summary via WebSocket');
+      analyticsSummary.set(data.summary);
+      
+    } else if (data.type === 'location_list_update') {
+      // Handle location list updates
+      console.log('📍 Location list updated via WebSocket:', data.locations.length);
+      locations.set(data.locations);
+      
+    } else if (data.type === 'camera_status_update') {
+      // Handle camera status updates
+      console.log('📹 Camera status updated via WebSocket:', data.cameras.length);
+      cameras.set(data.cameras);
+      
+    } else if (data.type === 'analytics_summary_update') {
+      // Handle analytics summary updates
+      console.log(`📊 Analytics summary updated via WebSocket (${data.timeframe})`);
+      analyticsSummary.set(data.summary);
+      
+    } else if (data.type === 'chart_data_update') {
+      // Handle chart data updates
+      console.log(`📈 Chart data updated via WebSocket for ${data.location_id}`);
+      
+      // Dispatch custom event for chart components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('chartDataUpdate', {
+          detail: {
+            locationId: data.location_id,
+            chartData: data.chart_data
+          }
+        }));
+      }
+      
+    } else if (data.type === 'chart_data_response') {
+      // Handle chart data response
+      console.log(`📈 Chart data response for ${data.location_id} (${data.timeframe})`);
+      
+      // Dispatch custom event for chart components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('chartDataResponse', {
+          detail: {
+            locationId: data.location_id,
+            timeframe: data.timeframe,
+            chartData: data.chart_data
+          }
+        }));
+      }
+      
+    } else if (data.type === 'analytics_summary_response') {
+      // Handle analytics summary response
+      console.log(`📊 Analytics summary response (${data.timeframe})`);
+      analyticsSummary.set(data.summary);
       
     } else {
       console.warn('⚠️ Unknown WebSocket message type:', data.type);
@@ -651,7 +663,24 @@ export function loadProgressiveSamples(locationId, timeframe, sampleCount = 50) 
 }
 
 /**
- * Load chart data via WebSocket (REAL-TIME data only)
+ * Load locations via WebSocket (replaces GraphQL)
+ */
+export function loadLocationsViaWebSocket() {
+  // Data will come via WebSocket initial_locations message
+  // No need to return anything - store will be updated automatically
+  console.log('📍 Locations will be loaded via WebSocket initial data');
+}
+
+/**
+ * Load analytics summary via WebSocket (replaces GraphQL)
+ */
+export function loadAnalyticsSummaryViaWebSocket(timeframe = 'DAILY') {
+  analyticsAPI.requestAnalyticsSummary(timeframe);
+  console.log(`📊 Requesting analytics summary via WebSocket: ${timeframe}`);
+}
+
+/**
+ * Load chart data via WebSocket (replaces GraphQL)
  */
 export function loadChartDataViaWebSocket(locationId, timeframe) {
   analyticsAPI.requestChartData(locationId, timeframe);
@@ -659,80 +688,39 @@ export function loadChartDataViaWebSocket(locationId, timeframe) {
 }
 
 /**
- * Periodic GraphQL data refresh (every 5 minutes)
- * Only for non-realtime data: locations, cameras, analytics summary
+ * Refresh all data via WebSocket (replaces periodic refresh)
  */
-export async function refreshPeriodicData() {
-  console.log('🔄 Refreshing periodic GraphQL data...');
-  const timeframe = get(selectedTimeframe);
-  
-  // Clear caches for fresh data
-  locationCache.clear();
-  
-  // Load only periodic data via GraphQL (not real-time data)
-  await Promise.allSettled([
-    loadLocations(),
-    loadAnalyticsSummary(timeframe), 
-    loadCameras()
-  ]);
-  
-  console.log('✅ Periodic GraphQL data refreshed successfully');
+export function refreshAllDataViaWebSocket() {
+  analyticsAPI.refreshAllData();
+  console.log('🔄 Refreshing all data via WebSocket');
 }
 
 /**
- * OLD: Refresh all data (DEPRECATED - now split into periodic vs real-time)
+ * OLD FUNCTION - Refresh all data (DEPRECATED - kept for compatibility)
  */
 export async function refreshAllData() {
-  console.warn('⚠️ refreshAllData() is deprecated - use refreshPeriodicData() for non-realtime data');
-  await refreshPeriodicData();
+  // DEPRECATED: This function now uses WebSocket instead of GraphQL
+  console.warn('⚠️ refreshAllData() is deprecated - use refreshAllDataViaWebSocket() instead');
+  refreshAllDataViaWebSocket();
+  return; // No longer returns promise since WebSocket is async
 }
 
 /**
- * Periodic GraphQL refresh timer (5 minutes for non-realtime data)
+ * Auto-refresh timer (DEPRECATED - WebSocket provides real-time updates)
  */
-let periodicRefreshTimer = null;
+let refreshTimer = null;
 
-export function startPeriodicRefresh(intervalMs = 300000) { // 5 minutes = 300000ms
-  if (periodicRefreshTimer) {
-    clearInterval(periodicRefreshTimer);
-  }
-  
-  console.log(`🔄 Starting periodic GraphQL refresh every ${intervalMs / 1000} seconds`);
-  
-  periodicRefreshTimer = setInterval(() => {
-    if (get(autoRefresh)) {
-      refreshPeriodicData();
-    }
-  }, intervalMs);
-  
-  // Also refresh immediately on start
-  if (get(autoRefresh)) {
-    refreshPeriodicData();
-  }
+export function startAutoRefresh(intervalMs = 30000) {
+  console.warn('⚠️ startAutoRefresh() is deprecated - WebSocket provides real-time updates');
+  // No longer needed - WebSocket provides real-time updates
 }
 
-/**
- * DEPRECATED: Old auto-refresh (now use startPeriodicRefresh)
- */
-export function startAutoRefresh(intervalMs = 300000) {
-  console.warn('⚠️ startAutoRefresh() is deprecated - use startPeriodicRefresh() instead');
-  startPeriodicRefresh(intervalMs);
-}
-
-export function stopPeriodicRefresh() {
-  if (periodicRefreshTimer) {
-    clearInterval(periodicRefreshTimer);
-    periodicRefreshTimer = null;
-    console.log('🛑 Stopped periodic GraphQL refresh');
-  }
-}
-
-/**
- * DEPRECATED: Use stopPeriodicRefresh() instead
- */
 export function stopAutoRefresh() {
-  console.warn('⚠️ stopAutoRefresh() is deprecated - use stopPeriodicRefresh() instead');
-  stopPeriodicRefresh();
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+  console.log('✅ Auto-refresh stopped (WebSocket provides real-time updates)');
 }
 
 /**
@@ -753,35 +741,26 @@ export const locationsByCount = derived(
   $locations => [...$locations].sort((a, b) => b.liveCount - a.liveCount)
 );
 
-// Initialize health check and periodic refresh system
-console.log('🚀 Initializing analytics store...');
+// Initialize health check with enhanced logging
+// Initializing analytics store...
 
 analyticsAPI.healthCheck().then(isHealthy => {
   if (isHealthy) {
-    console.log('✅ Analytics API is healthy');
-    
+    // Analytics API is healthy
     // Test GraphQL connection
     analyticsAPI.testConnection().then(connected => {
       if (connected) {
-        console.log('✅ GraphQL connection verified');
-        
-        // Start periodic refresh for non-realtime data (5 minutes)
-        startPeriodicRefresh(300000); // 5 minutes
-        
+        // GraphQL connection verified
       } else {
         console.warn('⚠️ CounterWeb: GraphQL connection test failed');
-        fallbackMode.set(true);
-        fallbackReason.set('GraphQL connection failed');
       }
     });
   } else {
     console.warn('⚠️ CounterWeb: Analytics API health check failed');
-    fallbackMode.set(true);
-    fallbackReason.set('API health check failed');
   }
 });
 
-console.log('✅ Analytics store ready with hybrid WebSocket + GraphQL architecture');
+// Analytics store ready
 
 // 🧪 TESTING HELPERS - Available in browser console
 if (typeof window !== 'undefined') {

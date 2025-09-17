@@ -118,6 +118,18 @@
     animation: pulse 2s infinite;
   }
   
+  .status-indicator.fallback {
+    background: #f39c12;
+    box-shadow: 0 0 8px rgba(243, 156, 18, 0.5);
+    animation: pulse-warning 3s infinite;
+  }
+  
+  @keyframes pulse-warning {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+  }
+  
   @keyframes pulse {
     0% { opacity: 1; }
     50% { opacity: 0.5; }

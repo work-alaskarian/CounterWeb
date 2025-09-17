@@ -602,6 +602,14 @@ class AnalyticsAPI {
           this.pingInterval = null;
         }
         
+        // Notify fallback system
+        this.notifySubscribers({ 
+          event: 'websocketDisconnected', 
+          code: event.code,
+          reason: event.reason,
+          timestamp: new Date().toISOString()
+        });
+        
         // Only attempt reconnection if we have subscribers and haven't exceeded max attempts
         if (this.subscribers.size > 0 && this.reconnectionState.attempts < this.reconnectionState.maxAttempts) {
           this.scheduleReconnection();
@@ -609,7 +617,9 @@ class AnalyticsAPI {
           console.error('❌ WebSocket max reconnection attempts reached. Connection failed permanently.');
           this.notifySubscribers({ 
             event: 'connectionFailed', 
-            message: 'WebSocket connection failed after maximum retry attempts' 
+            message: 'WebSocket connection failed after maximum retry attempts',
+            maxAttemptsReached: true,
+            timestamp: new Date().toISOString()
           });
         }
       };
@@ -742,6 +752,39 @@ class AnalyticsAPI {
       sampleCount: sampleCount
     });
     console.log(`📈 Requesting progressive samples: ${locationId}, ${timeframe}, ${sampleCount} samples`);
+  }
+
+  /**
+   * Request chart data via WebSocket (replaces periodic GraphQL requests)
+   */
+  requestChartData(locationId, timeframe) {
+    this.sendWebSocketMessage({
+      action: 'request_chart_data',
+      locationId: locationId,
+      timeframe: timeframe
+    });
+    console.log(`📊 Requesting chart data: ${locationId}, ${timeframe}`);
+  }
+
+  /**
+   * Request analytics summary via WebSocket (replaces periodic GraphQL requests)
+   */
+  requestAnalyticsSummary(timeframe = 'DAILY') {
+    this.sendWebSocketMessage({
+      action: 'request_analytics_summary',
+      timeframe: timeframe
+    });
+    console.log(`📈 Requesting analytics summary: ${timeframe}`);
+  }
+
+  /**
+   * Refresh all data via WebSocket (replaces periodic refresh)
+   */
+  refreshAllData() {
+    this.sendWebSocketMessage({
+      action: 'refresh_data'
+    });
+    console.log(`🔄 Requesting data refresh`);
   }
 
   /**
