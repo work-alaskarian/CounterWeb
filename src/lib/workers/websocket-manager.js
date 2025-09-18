@@ -12,7 +12,6 @@ class WebSocketManager {
     this.isInitialized = false;
     this.maxWorkersPerLocation = 1; // Prevent duplicate workers
     
-    console.log('🏗️ WebSocketManager initialized');
   }
   
   /**
@@ -23,22 +22,24 @@ class WebSocketManager {
     const workerId = this.getWorkerId(locationId, actualTimeframe);
     
     if (this.workers.has(workerId)) {
-      console.log(`♻️ WebSocketManager: Reusing existing worker for ${locationId}`);
       return this.workers.get(workerId);
     }
     
-    console.log(`🚀 WebSocketManager: Creating new worker for ${locationId} (${actualTimeframe})`);
+    // Check if we're exceeding the maximum workers per location
+    const existingWorkers = Array.from(this.workers.keys()).filter(id => id.startsWith(locationId));
+    if (existingWorkers.length >= this.maxWorkersPerLocation) {
+      return this.workers.get(existingWorkers[0]);
+    }
+    
     
     const worker = new WebSocketWorker(locationId, actualTimeframe);
     this.workers.set(workerId, worker);
     
     // Setup worker lifecycle handlers
     worker.onConnect = () => {
-      console.log(`✅ WebSocketManager: Worker connected for ${locationId}`);
     };
     
     worker.onDisconnect = () => {
-      console.log(`🔌 WebSocketManager: Worker disconnected for ${locationId}`);
     };
     
     worker.onError = (error) => {
@@ -46,7 +47,6 @@ class WebSocketManager {
       
       // If worker fails permanently, remove it so it can be recreated
       if (error.code === 'MAX_RECONNECT_ATTEMPTS') {
-        console.log(`🗑️ WebSocketManager: Removing failed worker for ${locationId}`);
         this.removeWorker(locationId, actualTimeframe);
       }
     };
@@ -72,7 +72,6 @@ class WebSocketManager {
     
     const worker = this.workers.get(workerId);
     if (worker) {
-      console.log(`🗑️ WebSocketManager: Removing worker for ${locationId}`);
       worker.disconnect();
       this.workers.delete(workerId);
     }
@@ -99,7 +98,6 @@ class WebSocketManager {
       return;
     }
     
-    console.log(`🔄 WebSocketManager: Updating global timeframe from ${this.globalTimeframe} to ${newTimeframe}`);
     this.globalTimeframe = newTimeframe;
     
     // Update all existing workers
@@ -109,15 +107,52 @@ class WebSocketManager {
   }
   
   /**
-   * Update timeframe for specific location worker
+   * Update timeframe for specific location worker - close old connection and create new one
    */
   updateWorkerTimeframe(locationId, newTimeframe) {
-    const worker = this.getWorker(locationId);
-    if (worker) {
-      worker.updateTimeframe(newTimeframe);
-    } else {
-      console.warn(`⚠️ WebSocketManager: No worker found for ${locationId} to update timeframe`);
+    console.log(`🔄 WebSocketManager: Updating timeframe for ${locationId} from ${this.globalTimeframe} to ${newTimeframe}`);
+
+    // Remove existing worker for this location (all timeframes)
+    const existingWorkers = Array.from(this.workers.keys()).filter(id => id.startsWith(locationId));
+    const oldHandlers = {};
+
+    existingWorkers.forEach(workerId => {
+      const worker = this.workers.get(workerId);
+      if (worker) {
+        // Store the event handlers before disconnecting
+        oldHandlers[workerId] = {
+          onUpdate: worker.onUpdate,
+          onChartData: worker.onChartData,
+          onError: worker.onError
+        };
+
+        console.log(`🔌 WebSocketManager: Disconnecting old worker ${workerId}`);
+        worker.disconnect();
+        this.workers.delete(workerId);
+      }
+    });
+
+    // Create new worker with the new timeframe
+    const newWorker = this.createWorker(locationId, newTimeframe);
+
+    // Restore event handlers to the new worker
+    if (existingWorkers.length > 0) {
+      const oldWorkerId = existingWorkers[0];
+      const handlers = oldHandlers[oldWorkerId];
+      if (handlers) {
+        newWorker.onUpdate = handlers.onUpdate;
+        newWorker.onChartData = handlers.onChartData;
+        newWorker.onError = handlers.onError;
+      }
     }
+
+    // Connect the new worker
+    if (!newWorker.isConnected) {
+      newWorker.connect();
+    }
+
+    console.log(`✅ WebSocketManager: Created new worker for ${locationId} with timeframe ${newTimeframe}`);
+    return newWorker;
   }
   
   /**
@@ -141,7 +176,6 @@ class WebSocketManager {
    * Disconnect all workers
    */
   disconnectAll() {
-    console.log(`🔌 WebSocketManager: Disconnecting all ${this.workers.size} workers`);
     
     for (const [workerId, worker] of this.workers) {
       worker.disconnect();
@@ -154,7 +188,6 @@ class WebSocketManager {
    * Reconnect all workers
    */
   reconnectAll() {
-    console.log(`🔄 WebSocketManager: Reconnecting all workers`);
     
     for (const [workerId, worker] of this.workers) {
       if (!worker.isConnected) {
@@ -217,7 +250,6 @@ class WebSocketManager {
     for (const workerId of failedWorkers) {
       const worker = this.workers.get(workerId);
       if (worker) {
-        console.log(`🧹 WebSocketManager: Cleaning up failed worker ${workerId}`);
         worker.disconnect();
         this.workers.delete(workerId);
       }
@@ -268,11 +300,6 @@ class WebSocketManager {
     
     this.healthInterval = setInterval(() => {
       const health = this.healthCheck();
-      console.log(`💓 WebSocketManager Health:`, {
-        connected: health.connectedWorkers,
-        total: health.totalWorkers,
-        health: `${(health.overallHealth * 100).toFixed(1)}%`
-      });
       
       // Auto-cleanup if too many workers are failing
       if (health.errorWorkers > 0) {
@@ -295,7 +322,6 @@ class WebSocketManager {
    * Destroy manager and all workers
    */
   destroy() {
-    console.log('🔥 WebSocketManager: Destroying manager');
     
     this.stopHealthMonitoring();
     this.disconnectAll();

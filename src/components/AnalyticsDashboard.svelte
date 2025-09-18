@@ -42,11 +42,23 @@
   onMount(async () => {
     // Find the analytics section
     analyticsSection = document.getElementById('analytics');
-    
+
     if (analyticsSection) {
+      // Check if analytics section is already in view on page load
+      const rect = analyticsSection.getBoundingClientRect();
+      const isInView = rect.top < window.innerHeight && rect.bottom > 0;
+
+      if (isInView && !hasInitialized) {
+        // Analytics section is in view on page load, initialize immediately
+        console.log('📊 Analytics section in view on page load, initializing immediately');
+        isVisible = true;
+        initializeDashboard();
+      }
+
       const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
           if (entry.isIntersecting && !hasInitialized) {
+            console.log('📊 Analytics section became visible, initializing');
             isVisible = true;
             initializeDashboard();
           }
@@ -54,9 +66,9 @@
       }, {
         rootMargin: '100px' // Start loading 100px before the section becomes visible
       });
-      
+
       observer.observe(analyticsSection);
-      
+
       return () => {
         observer.disconnect();
       };
@@ -95,8 +107,13 @@
         console.error('❌ Failed to load cameras:', cameraError);
       }
       
-      // Initialize charts
+      // Initialize charts with current timeframe data
       try {
+        console.log(`📊 Initializing charts with timeframe: ${timeframe}`);
+
+        // Wait for DOM elements to be ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         await initializeCharts();
       } catch (chartInitError) {
         console.error('❌ Chart initialization failed:', chartInitError);
@@ -397,10 +414,14 @@
    */
   async function loadChartsWithRealData(chartConfigs, chartOptions, isDarkMode) {
     isLoadingCharts = true;
-    
+
     try {
+      console.log(`📊 Loading charts data for timeframe: ${timeframe} (mapped: ${mapTimeframe(timeframe)})`);
+
       // Load visitor trends chart with real data
       const visitorTrendsData = await getAnalyticsChart('visitors_over_time', mapTimeframe(timeframe));
+      console.log('📊 Visitor trends data:', visitorTrendsData);
+
       if (visitorTrendsData && visitorTrendsData.labels && visitorTrendsData.datasets) {
         chartConfigs.trafficChart.data = {
           labels: visitorTrendsData.labels,
@@ -426,26 +447,31 @@
         };
       }
 
-      // Load location distribution and device analytics if available  
+      // Load location distribution and device analytics if available
       const supportedChartTypes = ['location_distribution', 'device_stats'];
       await Promise.all(supportedChartTypes.map(async (type) => {
         try {
+          console.log(`📊 Loading ${type} chart data...`);
           const data = await getAnalyticsChart(type, mapTimeframe(timeframe));
+          console.log(`📊 ${type} data:`, data);
+
           if (data && data.labels && data.datasets) {
             // Map to existing chart names if they exist
             const chartMapping = {
               'location_distribution': 'demographicsChart',
               'device_stats': 'deviceChart'
             };
-            
+
             const chartKey = chartMapping[type];
             if (chartKey && chartConfigs[chartKey]) {
               chartConfigs[chartKey].data = {
                 labels: data.labels,
                 datasets: data.datasets
               };
-              // Successfully loaded chart data
+              console.log(`✅ ${type} chart data loaded successfully`);
             }
+          } else {
+            console.warn(`⚠️ No data returned for ${type} chart`);
           }
         } catch (error) {
           console.warn(`⚠️ Using no-data placeholder for ${type} chart:`, error.message);
@@ -457,19 +483,31 @@
     }
 
     // Create all charts - destroy existing first
+    console.log(`📊 Creating charts:`, Object.keys(chartConfigs));
     Object.keys(chartConfigs).forEach(id => {
       const canvas = document.getElementById(id);
       if (canvas) {
+        console.log(`📊 Creating chart: ${id}`);
+
         // Destroy existing chart if it exists
         if (charts[id]) {
+          console.log(`📊 Destroying existing chart: ${id}`);
           charts[id].destroy();
         }
-        
-        charts[id] = new Chart(canvas, chartConfigs[id]);
+
+        try {
+          charts[id] = new Chart(canvas, chartConfigs[id]);
+          console.log(`✅ Chart created successfully: ${id}`);
+        } catch (error) {
+          console.error(`❌ Failed to create chart ${id}:`, error);
+        }
+      } else {
+        console.warn(`⚠️ Canvas not found for chart: ${id}`);
       }
     });
 
     isLoadingCharts = false;
+    console.log('✅ All charts creation completed');
   }
   
   function toggleCustomizeModal() {
@@ -493,22 +531,34 @@
   }
 
   // Reactive statements to handle timeframe changes
-  $: if (timeframe) {
+  $: if (timeframe && hasInitialized) {
+    console.log(`📊 Timeframe changed to ${timeframe}, refreshing analytics data`);
     loadAnalyticsSummary(mapTimeframe(timeframe));
     refreshCharts();
   }
 
   async function refreshCharts() {
-    if (isLoadingCharts) return;
-    
-    // Destroy existing charts
-    Object.values(charts).forEach(chart => {
-      if (chart) chart.destroy();
-    });
-    charts = {};
-    
-    // Re-initialize with new data
-    await initializeCharts();
+    if (isLoadingCharts || !hasInitialized) return;
+
+    try {
+      console.log(`📊 Refreshing charts for timeframe: ${timeframe}`);
+
+      // Destroy existing charts
+      Object.values(charts).forEach(chart => {
+        if (chart) chart.destroy();
+      });
+      charts = {};
+
+      // Load fresh chart data
+      await loadAllChartsData(mapTimeframe(timeframe));
+
+      // Re-initialize with new data
+      await initializeCharts();
+
+      console.log('✅ Charts refreshed successfully');
+    } catch (error) {
+      console.error('❌ Failed to refresh charts:', error);
+    }
   }
 </script>
 

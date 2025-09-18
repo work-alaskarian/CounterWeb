@@ -1,7 +1,8 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
-  import 'leaflet/dist/leaflet.css';
-  import L from 'leaflet';
+  // Leaflet is loaded globally in index.html
+  // import 'leaflet/dist/leaflet.css'; // Already loaded in index.html
+  // import L from 'leaflet'; // Use global L instead
 
   let mapContainer;
   const dispatch = createEventDispatcher();

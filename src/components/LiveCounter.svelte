@@ -2,6 +2,7 @@
   import './styles/LiveCounter.css';
   import { onMount, onDestroy } from 'svelte';
   import Chart from './Chart.svelte';
+  import { DotLottieSvelte } from '@lottiefiles/dotlottie-svelte';
   import { getLocation, getLocationChartData, setupRealTimeUpdates, locations, updateLiveTimeframe, subscribeToLocationWithTimeframe, loadProgressiveSamples, loadChartDataViaWebSocket, websocketHealthy, fallbackMode } from '../lib/stores/analytics.js';
   import analyticsAPI from '../lib/api/analytics.js';
   import { getWebSocketManager } from '../lib/workers/websocket-manager.js';
@@ -44,16 +45,23 @@
   let componentId = `livecounter_${location.id}_${Math.random().toString(36).substring(7)}`;
   let isWebSocketHealthy = true;
   let isInFallbackMode = false;
-  
+
   // Dedicated WebSocket worker for this component
   let wsManager = null;
   let wsWorker = null;
   let wsUnsubscribe = null;
+
+  // Animation state
+  let counterAnimationKey = 0;
+  let showCountUpAnimation = false;
+  let previousCount = 0;
+  let displayCount = 0;
+  let countUpInterval = null;
   
   function getTimeframeConfig(width) {
     // Base points calculation based on width (more width = more points for better resolution)
     const basePoints = Math.min(Math.max(Math.floor(width / 8), 30), 150);
-    
+
     return {
       Hourly: { points: basePoints, base: 500, variance: 20, delay: 500 },
       Daily: { points: Math.floor(basePoints * 0.8), base: 12000, variance: 500, delay: 800 },
@@ -61,14 +69,50 @@
       Monthly: { points: Math.floor(basePoints * 1.5), base: 330000, variance: 10000, delay: 1500 }
     };
   }
+
+  function animateCounterUp(fromCount, toCount, duration = 1000) {
+    if (countUpInterval) {
+      clearInterval(countUpInterval);
+    }
+
+    if (fromCount === toCount) {
+      displayCount = toCount;
+      return;
+    }
+
+    const startTime = Date.now();
+    const countDifference = toCount - fromCount;
+    showCountUpAnimation = true;
+
+    countUpInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Easing function for smooth animation
+      const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+
+      displayCount = Math.round(fromCount + (countDifference * easeOutQuart));
+
+      if (progress >= 1) {
+        displayCount = toCount;
+        showCountUpAnimation = false;
+        clearInterval(countUpInterval);
+        countUpInterval = null;
+        // Trigger bounce animation
+        counterAnimationKey++;
+      }
+    }, 16); // ~60fps
+  }
   
   onMount(() => {
     displayDate();
     updateContainerWidth();
+
+    // Initialize display count
+    displayCount = count;
     
     // Initialize dedicated WebSocket worker for real locations
     if (location.id && location.id !== 'default' && location.id !== 'all-data') {
-      console.log(`🚀 ${componentId}: Initializing dedicated WebSocket worker`);
       
       // Get WebSocket manager and create worker for this location
       wsManager = getWebSocketManager();
@@ -83,19 +127,36 @@
           
           // Use cumulative count, never show 0
           const newCount = updateData.cumulativeCount || updateData.count || count;
-          
+
           if (newCount !== count) {
+            previousCount = count;
             count = newCount;
             animatedCount = newCount;
+
+            // Animate the counter change
+            animateCounterUp(displayCount, newCount, 800);
             
-            // Update summary text for cumulative display
-            summaryText = `إجمالي تراكمي - ${location.name}`;
-            changeText = updateData.isCumulative ? 'العد التراكمي' : 'تحديث مباشر';
-            changeDirection = 'positive';
+            // Update summary text for cumulative display with data source indicator
+            const sourceText = updateData.source === 'indexeddb' ? '(مُحفوظ)' : 
+                             updateData.source === 'offline_sync' ? '(مُزامن)' : '';
+            summaryText = `إجمالي تراكمي - ${location.name} ${sourceText}`;
+            
+            // Update change text based on data source and type
+            if (updateData.isPersisted || updateData.source === 'indexeddb') {
+              changeText = 'بيانات محفوظة محلياً';
+              changeDirection = 'neutral';
+            } else if (updateData.isSync || updateData.source === 'offline_sync') {
+              changeText = 'تم استعادة البيانات';
+              changeDirection = 'positive';
+            } else {
+              changeText = updateData.isCumulative ? 'العد التراكمي' : 'تحديث مباشر';
+              changeDirection = 'positive';
+            }
           }
           
-          // Stop progressive loading if it was active
-          if (isProgressiveLoading && updateData.isComplete) {
+          // Stop progressive loading if it was active or if we got any data
+          if (isProgressiveLoading && (updateData.isComplete || updateData.count > 0 || updateData.cumulativeCount > 0)) {
+            console.log(`✅ ${componentId}: Completing progressive loading with data:`, updateData);
             isProgressiveLoading = false;
           }
         },
@@ -129,13 +190,27 @@
       isProgressiveLoading = true;
       animatedCount = 0;
       count = 0;
-      
+
       summaryText = `تحميل البيانات التراكمية...`;
       changeText = `جاري تحميل ${timeframe.toLowerCase()}`;
       changeDirection = 'positive';
+
+      // Set timeout to stop progressive loading if it takes too long
+      setTimeout(() => {
+        if (isProgressiveLoading) {
+          console.log(`⏰ ${componentId}: Progressive loading timeout, forcing completion`);
+          isProgressiveLoading = false;
+          summaryText = `العدد التراكمي الإجمالي - ${location.name}`;
+          changeText = 'البيانات متاحة';
+          changeDirection = 'positive';
+        }
+      }, 5000); // 5 second timeout
       
+    } else if (location.id === 'all-data') {
+      // For all-data, load backend total calculation
+      loadAllDataFromBackend();
     } else {
-      // For default/all-data locations, use regular loading
+      // For default locations, use regular loading
       loadLocationData();
     }
     
@@ -146,7 +221,6 @@
     const unsubscribeWebSocketHealth = websocketHealthy.subscribe(healthy => {
       isWebSocketHealthy = healthy;
       if (!healthy && !isInFallbackMode) {
-        console.warn(`⚠️ ${componentId}: WebSocket unhealthy, enabling fallback mode`);
         isInFallbackMode = true;
         enableFallbackMode();
       } else if (healthy && isInFallbackMode) {
@@ -163,34 +237,46 @@
     
     // Subscribe to location store changes for real-time updates
     unsubscribeLocations = locations.subscribe($locations => {
-      if (isProgressiveLoading) {
-        // Skip updates during progressive loading
-        return;
-      }
-      
       if (location.id === 'all-data') {
         // For combined data, sum all regional locations
         const totalCount = $locations.reduce((sum, loc) => sum + (loc.liveCount || 0), 0);
-        console.log(`🔥 ${componentId}: All-data calculation:`, {
-          locationsCount: $locations.length,
-          individualCounts: $locations.map(loc => `${loc.id}=${loc.liveCount || 0}`),
-          newTotal: totalCount,
-          currentCount: count,
-          willUpdate: totalCount !== count
-        });
-        
+
         if (totalCount !== count) {
+          previousCount = count;
           count = totalCount;
           animatedCount = totalCount;
-          console.log(`🔥 ${componentId}: Updated combined count from ${count} to ${totalCount}`);
+
+          // Animate the counter change
+          animateCounterUp(displayCount, totalCount, 1000);
+
+          // Complete loading if we got data
+          if (isProgressiveLoading && totalCount > 0) {
+            console.log(`✅ ${componentId}: Completing loading from store data for all-data: ${totalCount}`);
+            isProgressiveLoading = false;
+            summaryText = `إجمالي جميع المناطق`;
+            changeText = 'البيانات محدثة';
+            changeDirection = 'positive';
+          }
         }
       } else if (location.id && location.id !== 'default') {
         // For specific location, find matching location
         const locationData = $locations.find(loc => loc.id === location.id);
         if (locationData && locationData.liveCount !== undefined && locationData.liveCount !== count) {
+          previousCount = count;
           count = locationData.liveCount;
           animatedCount = locationData.liveCount;
-          console.log('🔥 LiveCounter: Updated count from real-time:', count, 'for', location.id);
+
+          // Animate the counter change
+          animateCounterUp(displayCount, locationData.liveCount, 1000);
+
+          // Complete loading if we got data
+          if (isProgressiveLoading) {
+            console.log(`✅ ${componentId}: Completing loading from store data for ${location.id}: ${locationData.liveCount}`);
+            isProgressiveLoading = false;
+            summaryText = `العدد التراكمي الإجمالي - ${location.name}`;
+            changeText = 'البيانات محدثة';
+            changeDirection = 'positive';
+          }
         }
       }
     });
@@ -301,14 +387,18 @@
   });
   
   onDestroy(() => {
-    console.log(`🧹 ${componentId}: Cleaning up component`);
-    
+
+    // Cleanup animations
+    if (countUpInterval) {
+      clearInterval(countUpInterval);
+    }
+
     // Cleanup WebSocket worker
     if (wsUnsubscribe) {
       wsUnsubscribe();
       wsUnsubscribe = null;
     }
-    
+
     if (updateInterval) {
       clearInterval(updateInterval);
     }
@@ -329,6 +419,44 @@
   /**
    * Load real location data from API
    */
+  /**
+   * Load all-data total from backend calculation
+   */
+  async function loadAllDataFromBackend() {
+    try {
+      isLoading = true;
+
+      // Get backend-calculated total
+      const totalData = await analyticsAPI.getAllLocationsTotal();
+
+      count = totalData.liveCount || 0;
+      animatedCount = count;
+
+      summaryText = `${totalData.name} - ${count} شخص`;
+      changeText = 'إجمالي محسوب من الخادم';
+      changeDirection = 'positive';
+
+      // Complete progressive loading
+      if (isProgressiveLoading) {
+        console.log(`✅ ${componentId}: Completing progressive loading from backend data`);
+        isProgressiveLoading = false;
+      }
+
+    } catch (error) {
+      console.error(`❌ ${componentId}: Failed to load backend total:`, error);
+      summaryText = 'خطأ في تحميل الإجمالي';
+      changeText = 'فشل في التحميل';
+      changeDirection = 'negative';
+
+      // Still complete progressive loading even on error
+      if (isProgressiveLoading) {
+        isProgressiveLoading = false;
+      }
+    } finally {
+      isLoading = false;
+    }
+  }
+
   async function loadLocationData() {
     console.log(`📊 ${componentId}: Loading location data for:`, location.id, 'Current count:', count);
     
@@ -415,6 +543,11 @@
       changeDirection = 'negative';
     } finally {
       isLoading = false;
+      // Also complete progressive loading if it's still active
+      if (isProgressiveLoading) {
+        console.log(`✅ ${componentId}: Completing progressive loading from loadLocationData`);
+        isProgressiveLoading = false;
+      }
     }
   }
 
@@ -692,15 +825,39 @@
   </div>
   
   <div class="counter-display">
-    <span class="counter-value" class:loading={isLoading || isProgressiveLoading} class:animating={isProgressiveLoading}>
-      {isProgressiveLoading ? animatedCount.toLocaleString('en-US') : count.toLocaleString('en-US')}
+    <div class="counter-container">
       {#if isLoading || isProgressiveLoading}
-        <span class="loading-spinner">⟳</span>
+        <div class="loading-animation">
+          <!-- You can replace this with a Lottie loading animation -->
+          <!-- <DotLottieSvelte src="path/to/loading-animation.lottie" loop autoplay /> -->
+          <div class="css-loading-spinner">
+            <div class="spinner-dot"></div>
+            <div class="spinner-dot"></div>
+            <div class="spinner-dot"></div>
+          </div>
+        </div>
+      {:else}
+        <span
+          class="counter-value"
+          class:counting-up={showCountUpAnimation}
+          class:bounce={counterAnimationKey > 0}
+          key={counterAnimationKey}
+        >
+          {displayCount.toLocaleString('en-US')}
+        </span>
       {/if}
-    </span>
+
+      {#if previousCount > 0 && displayCount > previousCount}
+        <div class="count-change-indicator" class:visible={showCountUpAnimation}>
+          <span class="change-arrow">↗</span>
+          <span class="change-amount">+{(displayCount - previousCount).toLocaleString('en-US')}</span>
+        </div>
+      {/if}
+    </div>
+
     <span class="counter-label">
       {#if isProgressiveLoading}
-        جاري التحميل... 
+        جاري التحميل...
       {:else if wsWorker && wsWorker.hasReceivedData}
         العدد التراكمي الإجمالي
       {:else}
@@ -728,7 +885,7 @@
     <div class="summary-section">
       <div class="summary-text">{summaryText}</div>
       <div class="summary-change {changeDirection}">
-        <span>{changeDirection === 'positive' ? '↑' : '↓'}</span>
+        <span>{changeDirection === 'positive' ? '↑' : changeDirection === 'negative' ? '↓' : '💾'}</span>
         <span>{changeText}</span>
       </div>
     </div>

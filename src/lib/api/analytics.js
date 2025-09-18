@@ -22,11 +22,6 @@ class AnalyticsAPI {
     
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`🔄 [${requestId}] CounterWeb GraphQL request (attempt ${attempt}/${retries}):`, {
-          endpoint: GRAPHQL_ENDPOINT,
-          query: query.replace(/\s+/g, ' ').trim(),
-          variables: variables
-        });
 
         const payload = { query, variables };
         const controller = new AbortController();
@@ -44,21 +39,12 @@ class AnalyticsAPI {
 
         clearTimeout(timeoutId);
         const responseTime = Date.now() - startTime;
-        console.log(`📥 [${requestId}] Response status: ${response.status} ${response.statusText} (${responseTime}ms)`);
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(`❌ [${requestId}] HTTP Error (attempt ${attempt}):`, {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText,
-            headers: Object.fromEntries(response.headers.entries()),
-            url: response.url
-          });
           
           // Retry on 500+ errors or network issues
           if (response.status >= 500 && attempt < retries) {
-            console.log(`🔄 [${requestId}] Retrying in ${attempt * 1000}ms...`);
             await new Promise(resolve => setTimeout(resolve, attempt * 1000));
             continue;
           }
@@ -67,13 +53,6 @@ class AnalyticsAPI {
         }
 
         const result = await response.json();
-        console.log(`✅ [${requestId}] Raw GraphQL response:`, {
-          hasData: !!result.data,
-          hasErrors: !!result.errors,
-          dataKeys: result.data ? Object.keys(result.data) : [],
-          errorCount: result.errors ? result.errors.length : 0,
-          responseTime: responseTime
-        });
         
         if (result.errors) {
           console.error(`❌ [${requestId}] GraphQL Errors:`, result.errors);
@@ -86,7 +65,6 @@ class AnalyticsAPI {
           );
           
           if (isRetryable && attempt < retries) {
-            console.log(`🔄 [${requestId}] Retrying GraphQL request in ${attempt * 1000}ms...`);
             await new Promise(resolve => setTimeout(resolve, attempt * 1000));
             continue;
           }
@@ -105,11 +83,9 @@ class AnalyticsAPI {
         }
 
         if (!result.data) {
-          console.warn(`⚠️ [${requestId}] No data in GraphQL response:`, result);
           return null;
         }
 
-        console.log(`📊 [${requestId}] Processed data keys:`, Object.keys(result.data || {}));
         return result.data;
         
       } catch (error) {
@@ -124,7 +100,6 @@ class AnalyticsAPI {
           error.message.includes('timeout');
           
         if (isRetryable && attempt < retries) {
-          console.log(`🔄 [${requestId}] Retrying request in ${attempt * 1000}ms...`);
           await new Promise(resolve => setTimeout(resolve, attempt * 1000));
           continue;
         }
@@ -163,6 +138,25 @@ class AnalyticsAPI {
       name: location.name,
       liveCount: location.liveCount || location.live_count || 0
     }));
+  }
+
+  async getAllLocationsTotal() {
+    const query = `
+      query GetAllLocationsTotal {
+        allLocationsTotal {
+          id
+          name
+          liveCount
+        }
+      }
+    `;
+    
+    const data = await this.graphql(query);
+    return {
+      id: data.allLocationsTotal.id,
+      name: data.allLocationsTotal.name,
+      liveCount: data.allLocationsTotal.liveCount || 0
+    };
   }
 
   /**

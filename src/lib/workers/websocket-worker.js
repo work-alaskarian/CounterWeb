@@ -1,7 +1,9 @@
 /**
  * WebSocket Worker for per-LiveCounter dedicated connections
- * Provides isolated WebSocket connections for each location counter
+ * Provides isolated WebSocket connections for each location counter with IndexedDB persistence
  */
+
+import { getIndexedDBService } from '../storage/indexeddb-service.js';
 
 class WebSocketWorker {
   constructor(locationId, timeframe = 'HOURLY') {
@@ -13,6 +15,13 @@ class WebSocketWorker {
     this.reconnectDelay = 1000; // Start with 1 second
     this.maxReconnectDelay = 30000; // Max 30 seconds
     this.lastHeartbeat = null;
+    
+    // IndexedDB service for persistent storage
+    this.indexedDB = getIndexedDBService();
+    this.hasPersistedData = false;
+    
+    // Subscription tracking
+    this.isSubscribed = false;
     this.heartbeatInterval = null;
     this.reconnectTimeout = null;
     this.websocket = null;
@@ -43,7 +52,66 @@ class WebSocketWorker {
     // Camera health tracking
     this.cameraHealth = null;
     
-    console.log(`🔌 WebSocketWorker created for ${locationId} (${this.connectionId})`);
+    
+    // Load persisted data on initialization
+    this.loadPersistedData();
+  }
+  
+  /**
+   * Load persisted data from IndexedDB
+   */
+  async loadPersistedData() {
+    try {
+      // Load latest count data
+      const latestCount = await this.indexedDB.getLatestLiveCount(this.locationId, this.timeframe);
+      if (latestCount) {
+        this.cumulativeCount = latestCount.cumulative_count || 0;
+        this.lastKnownCount = latestCount.count || 0;
+        
+        // Update timeframe counts
+        const timeframeKey = this.timeframe.toUpperCase();
+        if (this.cumulativeCountsByTimeframe[timeframeKey] !== undefined) {
+          this.cumulativeCountsByTimeframe[timeframeKey] = latestCount.timeframe_count || 0;
+        }
+        
+        this.hasPersistedData = true;
+        this.hasReceivedData = true;
+        
+        
+        // Trigger initial update with persisted data
+        if (this.onUpdate) {
+          this.onUpdate({
+            count: this.cumulativeCount,
+            cumulativeCount: this.cumulativeCount,
+            timeframeCount: latestCount.timeframe_count || 0,
+            timeframe: this.timeframe,
+            timestamp: latestCount.timestamp,
+            source: 'indexeddb',
+            isCumulative: true,
+            isPersisted: true
+          });
+        }
+      }
+      
+      // Load latest chart data
+      const latestChartData = await this.indexedDB.getLatestChartData(this.locationId, this.timeframe);
+      if (latestChartData && this.onChartData) {
+        this.lastChartData = latestChartData;
+        this.totalChartData = this.makeCumulative(latestChartData);
+        
+        
+        this.onChartData({
+          chartData: this.totalChartData,
+          locationId: this.locationId,
+          timeframe: this.timeframe,
+          source: 'indexeddb',
+          isPersisted: true
+        });
+      }
+      
+    } catch (error) {
+      console.error(`❌ ${this.connectionId}: Failed to load persisted data:`, error);
+    }
   }
   
   /**
@@ -51,7 +119,6 @@ class WebSocketWorker {
    */
   connect() {
     if (this.isConnected || this.websocket) {
-      console.log(`⚠️ ${this.connectionId}: Already connected or connecting`);
       return;
     }
     
@@ -72,6 +139,11 @@ class WebSocketWorker {
         
         // Start heartbeat
         this.startHeartbeat();
+        
+        // Sync offline data if this is a reconnection
+        if (this.reconnectAttempts > 0 || this.hasPersistedData) {
+          this.syncOfflineData();
+        }
         
         if (this.onConnect) {
           this.onConnect();
@@ -114,52 +186,60 @@ class WebSocketWorker {
   }
   
   /**
-   * Subscribe to location-specific updates
+   * Subscribe to location-specific updates using new pattern-based API
    */
   subscribe() {
     if (!this.isConnected || !this.websocket) {
-      console.warn(`⚠️ ${this.connectionId}: Cannot subscribe - not connected`);
       return;
     }
     
-    const subscriptionMessage = {
-      type: 'subscribe',
-      location_id: this.locationId,
-      timeframe: this.timeframe,
-      worker_id: this.connectionId,
-      timestamp: new Date().toISOString()
+    // Prevent duplicate subscriptions
+    if (this.isSubscribed) {
+      return;
+    }
+    
+    console.log(`📡 ${this.connectionId}: Subscribing to pattern-based updates for ${this.locationId}`);
+    
+    // Subscribe to live count pattern - auto-sends live counts every 3 seconds
+    const liveCountSubscription = {
+      action: 'subscribe_pattern',
+      pattern: 'live_count',
+      locationId: this.locationId,
+      interval: 3, // Every 3 seconds for live updates
+      timeframe: this.timeframe
     };
+    this.websocket.send(JSON.stringify(liveCountSubscription));
     
-    console.log(`📡 ${this.connectionId}: Subscribing to location ${this.locationId}`);
-    this.websocket.send(JSON.stringify(subscriptionMessage));
+    // Subscribe to chart data pattern - auto-sends chart data every 10 seconds
+    const chartDataSubscription = {
+      action: 'subscribe_pattern',
+      pattern: 'chart_data',
+      locationId: this.locationId,
+      interval: 10, // Every 10 seconds for chart updates
+      timeframe: this.timeframe,
+      limit: 20 // Last 20 data points
+    };
+    this.websocket.send(JSON.stringify(chartDataSubscription));
     
-    // Request initial data
-    this.requestData();
+    // Subscribe to ping_pong pattern for health monitoring - every 30 seconds
+    const pingPongSubscription = {
+      action: 'subscribe_pattern',
+      pattern: 'ping_pong',
+      interval: 30 // Every 30 seconds for health checks
+    };
+    this.websocket.send(JSON.stringify(pingPongSubscription));
+    
+    // Mark as subscribed after sending all subscription messages
+    this.isSubscribed = true;
   }
   
   /**
-   * Request initial data for this location
+   * Request initial data for this location (no longer needed with pattern-based auto-sending)
    */
   requestData() {
-    if (!this.isConnected || !this.websocket) {
-      return;
-    }
-    
-    // Request live count
-    this.websocket.send(JSON.stringify({
-      type: 'request_live_count',
-      location_id: this.locationId,
-      timeframe: this.timeframe,
-      worker_id: this.connectionId
-    }));
-    
-    // Request chart data
-    this.websocket.send(JSON.stringify({
-      type: 'request_chart_data',
-      location_id: this.locationId,
-      timeframe: this.timeframe,
-      worker_id: this.connectionId
-    }));
+    // No longer needed - pattern subscriptions automatically send data
+    // The pattern manager will handle sending initial and periodic updates
+    console.log(`📡 ${this.connectionId}: Pattern subscriptions active - data will be sent automatically`);
   }
   
   /**
@@ -181,7 +261,36 @@ class WebSocketWorker {
     console.log(`📡 ${this.connectionId}: Message received:`, data.type);
     
     switch (data.type) {
+      // NEW PATTERN-BASED MESSAGE TYPES
+      case 'live_count_subscribed':
+        console.log(`✅ ${this.connectionId}: Live count pattern subscribed`);
+        break;
+        
       case 'live_count_update':
+        this.handleLiveCountUpdate(data);
+        break;
+        
+      case 'chart_data_subscribed':
+        console.log(`✅ ${this.connectionId}: Chart data pattern subscribed`);
+        break;
+        
+      case 'chart_data_point':
+        this.handleChartDataUpdate(data);
+        break;
+        
+      case 'ping_pong_subscribed':
+        console.log(`✅ ${this.connectionId}: Ping pong pattern subscribed`);
+        break;
+        
+      case 'ping':
+        // Health ping from server - respond with pong
+        this.websocket.send(JSON.stringify({
+          action: 'pong',
+          timestamp: new Date().toISOString()
+        }));
+        break;
+        
+      // LEGACY MESSAGE TYPES (for backward compatibility)
       case 'timeframe_update':
         this.handleLiveCountUpdate(data);
         break;
@@ -199,8 +308,13 @@ class WebSocketWorker {
         this.handleProgressiveComplete(data);
         break;
         
+      case 'live_count_error':
+      case 'chart_data_error':
+        this.handleServerError(data);
+        break;
+        
       case 'pong':
-        // Heartbeat response
+        // Heartbeat response (legacy)
         break;
         
       case 'camera_health_update':
@@ -228,10 +342,14 @@ class WebSocketWorker {
     const currentTimeframe = data.timeframe || this.timeframe;
     
     // Store count by timeframe for cumulative tracking
-    this.cumulativeCountsByTimeframe[currentTimeframe] = Math.max(
-      this.cumulativeCountsByTimeframe[currentTimeframe], 
-      incomingCount
-    );
+    // Handle both "Daily" and "DAILY" format
+    const timeframeKey = currentTimeframe && currentTimeframe.toUpperCase();
+    if (timeframeKey && this.cumulativeCountsByTimeframe.hasOwnProperty(timeframeKey)) {
+      this.cumulativeCountsByTimeframe[timeframeKey] = Math.max(
+        this.cumulativeCountsByTimeframe[timeframeKey] || 0, 
+        incomingCount
+      );
+    }
     
     // Always use cumulative count - never show 0 if we've received data before
     if (incomingCount > 0 || !this.hasReceivedData) {
@@ -243,18 +361,26 @@ class WebSocketWorker {
     // Always display the cumulative total, never 0
     const displayCount = this.hasReceivedData ? Math.max(this.cumulativeCount, 1) : 0;
     
-    console.log(`📈 ${this.connectionId}: Count update - incoming: ${incomingCount}, cumulative: ${this.cumulativeCount}, display: ${displayCount}`);
     
     if (this.onUpdate) {
-      this.onUpdate({
+      // Get timeframe count safely
+      const timeframeKey = currentTimeframe && currentTimeframe.toUpperCase();
+      const timeframeCount = (timeframeKey && this.cumulativeCountsByTimeframe[timeframeKey]) || 0;
+      
+      const updateData = {
         count: displayCount,
         cumulativeCount: this.cumulativeCount,
-        timeframeCount: this.cumulativeCountsByTimeframe[currentTimeframe],
+        timeframeCount: timeframeCount,
         timeframe: currentTimeframe,
         timestamp: data.timestamp,
         source: 'realtime_thread',
         isCumulative: true
-      });
+      };
+      
+      // Persist to IndexedDB for stability
+      this.persistLiveCount(updateData);
+      
+      this.onUpdate(updateData);
     }
   }
   
@@ -268,7 +394,9 @@ class WebSocketWorker {
       // Convert chart data to cumulative totals - never show 0 or decreasing values
       this.totalChartData = this.makeCumulative(this.lastChartData);
       
-      console.log(`📊 ${this.connectionId}: Chart data update - ${this.lastChartData.length} points, cumulative total: ${this.totalChartData[this.totalChartData.length - 1] || 0}`);
+      
+      // Persist chart data for stability
+      this.persistChartData(this.lastChartData);
       
       if (this.onChartData) {
         this.onChartData({
@@ -276,7 +404,8 @@ class WebSocketWorker {
           rawData: this.lastChartData,    // Original data for reference
           timeframe: data.timeframe || this.timeframe,
           timestamp: data.timestamp,
-          isCumulative: true
+          isCumulative: true,
+          source: 'realtime_thread'
         });
       }
     }
@@ -327,7 +456,6 @@ class WebSocketWorker {
       return data; // No reduction needed
     }
     
-    console.log(`📊 ${this.connectionId}: Reducing chart data from ${data.length} to ${maxPoints} points`);
     
     // Calculate step size for uniform sampling
     const step = data.length / maxPoints;
@@ -353,7 +481,6 @@ class WebSocketWorker {
       adaptiveData.push(representative);
     }
     
-    console.log(`📈 ${this.connectionId}: Adaptive resolution complete - ${adaptiveData.length} points preserved`);
     return adaptiveData;
   }
   
@@ -467,7 +594,6 @@ class WebSocketWorker {
     // Never show 0 for final count
     const displayCount = Math.max(this.cumulativeCount, 1);
     
-    console.log(`✅ ${this.connectionId}: Progressive loading complete - final: ${finalCount}, cumulative: ${this.cumulativeCount}, display: ${displayCount}`);
     
     if (this.onUpdate) {
       this.onUpdate({
@@ -502,11 +628,6 @@ class WebSocketWorker {
    * Handle camera health updates
    */
   handleCameraHealthUpdate(data) {
-    console.log(`📷 ${this.connectionId}: Camera health update:`, {
-      healthy: data.healthy_cameras,
-      total: data.total_cameras,
-      percentage: data.health_percentage
-    });
     
     // Store camera health info
     this.cameraHealth = {
@@ -532,7 +653,6 @@ class WebSocketWorker {
    * Handle connection warnings from server
    */
   handleConnectionWarning(data) {
-    console.warn(`⚠️ ${this.connectionId}: Connection warning:`, data.message);
     
     if (this.onError) {
       this.onError({
@@ -546,26 +666,25 @@ class WebSocketWorker {
   }
   
   /**
-   * Start heartbeat to keep connection alive
+   * Start heartbeat to keep connection alive (now handled by ping_pong pattern)
    */
   startHeartbeat() {
     this.stopHeartbeat(); // Clear any existing heartbeat
     
+    // The ping_pong pattern subscription handles health monitoring
+    // No need for manual heartbeat - the pattern manager will send pings every 30 seconds
+    console.log(`💓 ${this.connectionId}: Heartbeat monitoring delegated to ping_pong pattern`);
+    
+    // Still check for connection health periodically
     this.heartbeatInterval = setInterval(() => {
-      if (this.isConnected && this.websocket) {
-        this.websocket.send(JSON.stringify({
-          type: 'ping',
-          worker_id: this.connectionId,
-          timestamp: new Date().toISOString()
-        }));
-        
-        // Check if we haven't received a heartbeat response in too long
-        if (this.lastHeartbeat && (Date.now() - this.lastHeartbeat) > 15000) {
-          console.warn(`💔 ${this.connectionId}: Heartbeat timeout - reconnecting`);
+      if (this.isConnected && this.lastHeartbeat) {
+        // Check if we haven't received any message in too long
+        if ((Date.now() - this.lastHeartbeat) > 45000) { // 45 seconds timeout
+          console.warn(`💔 ${this.connectionId}: Connection timeout - reconnecting`);
           this.handleDisconnect();
         }
       }
-    }, 10000); // Send ping every 10 seconds
+    }, 15000); // Check every 15 seconds
   }
   
   /**
@@ -583,6 +702,7 @@ class WebSocketWorker {
    */
   handleDisconnect() {
     this.isConnected = false;
+    this.isSubscribed = false; // Reset subscription status on disconnect
     this.stopHeartbeat();
     
     if (this.websocket) {
@@ -643,14 +763,12 @@ class WebSocketWorker {
       return; // No change needed
     }
     
-    console.log(`🔄 ${this.connectionId}: Updating timeframe from ${this.timeframe} to ${newTimeframe}`);
     this.timeframe = newTimeframe;
     
     // If connected, send update to server
     if (this.isConnected && this.websocket) {
       this.websocket.send(JSON.stringify({
-        type: 'update_timeframe',
-        location_id: this.locationId,
+        action: 'set_timeframe',
         timeframe: newTimeframe,
         worker_id: this.connectionId
       }));
@@ -665,37 +783,65 @@ class WebSocketWorker {
    */
   disconnect() {
     console.log(`🔌 ${this.connectionId}: Disconnecting worker`);
-    
+
     this.isConnected = false;
+    this.isSubscribed = false; // Reset subscription status on manual disconnect
     this.stopHeartbeat();
-    
+
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
-    
-    if (this.websocket) {
-      // Send unsubscribe message
+
+    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+      // Send unsubscribe messages for all patterns
       try {
+        console.log(`📤 ${this.connectionId}: Sending unsubscribe messages`);
+
+        // Unsubscribe from live count pattern with location info
         this.websocket.send(JSON.stringify({
-          type: 'unsubscribe',
-          location_id: this.locationId,
-          worker_id: this.connectionId
+          action: 'unsubscribe_pattern',
+          pattern: 'live_count',
+          locationId: this.locationId,
+          timeframe: this.timeframe
         }));
+
+        // Unsubscribe from chart data pattern with location info
+        this.websocket.send(JSON.stringify({
+          action: 'unsubscribe_pattern',
+          pattern: 'chart_data',
+          locationId: this.locationId,
+          timeframe: this.timeframe
+        }));
+
+        // Unsubscribe from ping pong pattern
+        this.websocket.send(JSON.stringify({
+          action: 'unsubscribe_pattern',
+          pattern: 'ping_pong'
+        }));
+
+        // Wait a moment for unsubscribe messages to be sent
+        setTimeout(() => {
+          if (this.websocket) {
+            this.websocket.close();
+          }
+        }, 100);
       } catch (error) {
-        // Ignore errors during cleanup
+        console.warn(`⚠️ ${this.connectionId}: Error during unsubscribe:`, error);
+        // Still close the connection
+        if (this.websocket) {
+          this.websocket.close();
+        }
       }
-      
+    } else if (this.websocket) {
+      // Connection not open, just close
       this.websocket.close();
-      this.websocket = null;
     }
-    
-    // Clear event handlers
-    this.onUpdate = null;
-    this.onChartData = null;
-    this.onError = null;
-    this.onConnect = null;
-    this.onDisconnect = null;
+
+    this.websocket = null;
+
+    // DON'T clear event handlers here - they will be transferred to new worker
+    console.log(`✅ ${this.connectionId}: Worker disconnected`);
   }
   
   /**
@@ -751,6 +897,57 @@ class WebSocketWorker {
       reconnectAttempts: this.reconnectAttempts,
       maxReconnectAttempts: this.maxReconnectAttempts
     };
+  }
+  
+  /**
+   * Persist live count data to IndexedDB
+   */
+  async persistLiveCount(data) {
+    try {
+      await this.indexedDB.storeLiveCount(this.locationId, this.timeframe, data);
+    } catch (error) {
+      console.error(`❌ ${this.connectionId}: Failed to persist live count:`, error);
+    }
+  }
+  
+  /**
+   * Persist chart data to IndexedDB
+   */
+  async persistChartData(chartData) {
+    try {
+      if (chartData && chartData.length > 0) {
+        await this.indexedDB.storeChartData(this.locationId, this.timeframe, chartData);
+      }
+    } catch (error) {
+      console.error(`❌ ${this.connectionId}: Failed to persist chart data:`, error);
+    }
+  }
+  
+  /**
+   * Sync offline data when reconnecting
+   */
+  async syncOfflineData() {
+    try {
+      
+      // Load latest persisted data
+      const latestCount = await this.indexedDB.getLatestLiveCount(this.locationId, this.timeframe);
+      if (latestCount && this.onUpdate) {
+        // Send cached data to maintain continuity
+        this.onUpdate({
+          count: latestCount.count || 0,
+          cumulativeCount: latestCount.cumulative_count || 0,
+          timeframeCount: latestCount.timeframe_count || 0,
+          timeframe: this.timeframe,
+          timestamp: latestCount.timestamp,
+          source: 'offline_sync',
+          isCumulative: true,
+          isSync: true
+        });
+      }
+      
+    } catch (error) {
+      console.error(`❌ ${this.connectionId}: Failed to sync offline data:`, error);
+    }
   }
 }
 
