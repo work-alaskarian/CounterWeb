@@ -1,5 +1,5 @@
 <script>
-  import { fallbackMode, fallbackReason, nextRetryTime } from '../lib/stores/analytics.js';
+  import { fallbackMode, fallbackReason } from '../lib/stores/analytics-simple.js';
   
   let showBanner = false;
   let reason = '';
@@ -14,9 +14,6 @@
     reason = currentReason || '';
   });
   
-  nextRetryTime.subscribe(nextTime => {
-    retryTime = nextTime;
-  });
   
   function formatRetryTime(time) {
     if (!time) return '';

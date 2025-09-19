@@ -65,21 +65,21 @@
    * Handle simple live count updates from global WebSocket service
    */
   function handleSimpleLiveCountUpdate(data) {
-    console.log(`📈 SIMPLE LiveCounter: Update for ${location.id}:`, data);
+    console.log(`📈 SIMPLE LiveCounter: NEW DATA for ${location.id}:`, data);
 
     const newCount = data.count || 0;
-    console.log(`🚀 SIMPLE: Setting count from ${count} to ${newCount}`);
+    console.log(`🚀 SIMPLE: Received new count for timeframe: ${newCount}`);
 
-    // Stop loading
+    // Stop loading state - we have new data
     isLoading = false;
+    connectionStatus = 'connected';
 
-    // Update count with animation
-    if (newCount !== count) {
-      animateCountUp(displayCount, newCount);
-      count = newCount;
-    }
+    // Always animate from current displayCount to new count
+    console.log(`🎬 SIMPLE: Animating ${location.id} from ${displayCount} to ${newCount}`);
+    animateCountUp(displayCount, newCount);
+    count = newCount;
 
-    console.log(`✅ SIMPLE: Count updated! Now animating to ${newCount}`);
+    console.log(`✅ SIMPLE: ${location.id} updated to ${newCount} for current timeframe`);
   }
 
   /**
@@ -91,6 +91,23 @@
     if (status.type === 'connected') {
       connectionStatus = 'connected';
       isLoading = false;
+    } else if (status.type === 'timeframe_reset') {
+      // IMMEDIATE reset count to 0 when timeframe changes
+      console.log(`🔄 SIMPLE LiveCounter: Timeframe changed, IMMEDIATE reset ${location.id} to 0`);
+      connectionStatus = 'connecting';
+      isLoading = true;
+
+      // Clear any ongoing animation
+      if (animationInterval) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+        isAnimating = false;
+      }
+
+      // IMMEDIATE reset - no animation
+      count = 0;
+      displayCount = 0;
+      console.log(`✅ SIMPLE LiveCounter: ${location.id} reset to 0, waiting for new timeframe data...`);
     } else if (status.type === 'disconnected') {
       connectionStatus = 'disconnected';
     } else if (status.type === 'error') {

@@ -4,13 +4,12 @@
   import DataTable from './DataTable.svelte';
   import ErrorBoundary from './ErrorBoundary.svelte';
   import LoadingState from './LoadingState.svelte';
-  import { 
-    analyticsSummary,
-    loadAnalyticsSummary,
-    loadAllChartsData,
-    chartData,
-    loadCameras
-  } from '../lib/stores/analytics.js';
+  import {
+    locations,
+    isLoading,
+    error,
+    loadLocations
+  } from '../lib/stores/analytics-simple.js';
   import { chartService } from '../lib/services/chartService.js';
   import { mapTimeframeToApi } from '../lib/utils/timeframe.js';
 
@@ -58,28 +57,14 @@
     isInitializing = true;
 
     try {
-      const apiTimeframe = mapTimeframeToApi(timeframe);
-      console.log('📊 AnalyticsDashboard: Loading data for timeframe:', apiTimeframe);
+      console.log('📊 AnalyticsDashboard: Loading locations data...');
 
-      await Promise.all([
-        loadAnalyticsSummary(apiTimeframe).catch(err => {
-          console.warn('⚠️ AnalyticsDashboard: Failed to load analytics summary:', err);
-          return null;
-        }),
-        loadAllChartsData(apiTimeframe).catch(err => {
-          console.warn('⚠️ AnalyticsDashboard: Failed to load charts data:', err);
-          return null;
-        }),
-        loadCameras().catch(err => {
-          console.warn('⚠️ AnalyticsDashboard: Failed to load cameras:', err);
-          return null;
-        })
-      ]);
+      await loadLocations().catch(err => {
+        console.warn('⚠️ AnalyticsDashboard: Failed to load locations:', err);
+        return null;
+      });
 
-      console.log('✅ AnalyticsDashboard: Data loading completed, initializing charts...');
-      await new Promise(resolve => setTimeout(resolve, 100));
-      await initializeCharts();
-      console.log('✅ AnalyticsDashboard: Dashboard fully initialized');
+      console.log('✅ AnalyticsDashboard: Dashboard initialized');
 
     } catch (error) {
       console.error('❌ AnalyticsDashboard: Initialization failed:', error);
@@ -135,10 +120,7 @@
     isLoadingCharts = true;
 
     try {
-      const apiTimeframe = mapTimeframeToApi(timeframe);
-      await loadAnalyticsSummary(apiTimeframe);
-      await loadAllChartsData(apiTimeframe);
-      await initializeCharts();
+      await loadLocations();
     } catch (error) {
       console.error('❌ Failed to refresh analytics:', error);
     } finally {
@@ -192,8 +174,8 @@
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-value">
-        {#if $analyticsSummary}
-          {$analyticsSummary.totalVisitors.toLocaleString('ar-EG')}
+        {#if $locations && $locations.length > 0}
+          {$locations.reduce((total, loc) => total + (loc.liveCount || 0), 0).toLocaleString('ar-EG')}
         {:else}
           152.3K
         {/if}
@@ -208,13 +190,13 @@
     </div>
     <div class="stat-card">
       <div class="stat-value">
-        {#if $analyticsSummary}
-          {$analyticsSummary.newVisitors.toLocaleString('ar-EG')}
+        {#if $locations && $locations.length > 0}
+          {$locations.length.toLocaleString('ar-EG')}
         {:else}
           98.7K
         {/if}
       </div>
-      <div class="stat-label">الزوار الجدد</div>
+      <div class="stat-label">المناطق النشطة</div>
       <div class="stat-change positive">
         <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
@@ -223,13 +205,7 @@
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-value">
-        {#if $analyticsSummary}
-          {$analyticsSummary.avgVisitDurationHours.toFixed(2)}
-        {:else}
-          2.45
-        {/if}
-      </div>
+      <div class="stat-value">2.45</div>
       <div class="stat-label">متوسط مدة الزيارة (ساعات)</div>
       <div class="stat-change negative">
         <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -239,13 +215,7 @@
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-value">
-        {#if $analyticsSummary}
-          {$analyticsSummary.peakVisitorsToday.toLocaleString('ar-EG')}
-        {:else}
-          3,450
-        {/if}
-      </div>
+      <div class="stat-value">3,450</div>
       <div class="stat-label">ذروة الزوار اليومية</div>
       <div class="stat-change positive">
         <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

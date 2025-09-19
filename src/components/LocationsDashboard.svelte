@@ -2,15 +2,14 @@
   import './styles/LocationsDashboard.css';
   import LiveCounter from './LiveCounter.svelte';
   import { customization } from '../lib/stores/customization.js';
-  import { 
-    locations, 
-    isLoading, 
+  import {
+    locations,
+    isLoading,
     error,
-    loadLocations, 
-    addLocation, 
-    removeLocation as removeLocationFromAPI,
-    setupRealTimeUpdates
-  } from '../lib/stores/analytics.js';
+    loadLocations,
+    addLocation,
+    removeLocation as removeLocationFromAPI
+  } from '../lib/stores/analytics-simple.js';
   import { onMount, onDestroy } from 'svelte';
   
   export let timeframe = 'Hourly';

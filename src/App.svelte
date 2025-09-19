@@ -83,8 +83,11 @@
 	}
 
 	// Add scroll listener
-	  import { onMount, onDestroy } from 'svelte';
-  import { loadLocations, setupRealTimeUpdates, updateLiveTimeframe } from './lib/stores/analytics.js';
+	import { onMount, onDestroy } from 'svelte';
+	import {
+		loadLocations
+	} from './lib/stores/analytics-simple.js';
+	import globalWebSocketService from './lib/services/global-websocket.js';
 	
 	
 	onMount(async () => {
