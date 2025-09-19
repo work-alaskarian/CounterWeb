@@ -1,5 +1,6 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
+  import './styles/Map.css';
   // Leaflet is loaded globally in index.html
   // import 'leaflet/dist/leaflet.css'; // Already loaded in index.html
   // import L from 'leaflet'; // Use global L instead
@@ -18,25 +19,54 @@
   onMount(() => {
     if (typeof L === 'undefined') {
       console.error('❌ Map: Leaflet library not loaded');
+      mapContainer.innerHTML = '<div style="text-align: center; padding: 20px; color: red;">❌ Map library not loaded</div>';
       return;
     }
 
-    console.log('🗺️ Map: Initializing...');
-    const initialTileX = 40755;
-    const initialTileY = 26136;
-    const initialZoom = 16;
+    if (!mapContainer) {
+      console.error('❌ Map: Container not found');
+      return;
+    }
 
-    const initialCoords = tile2latlon(initialTileX, initialTileY, initialZoom);
-    const map = L.map(mapContainer).setView(initialCoords, initialZoom);
+    console.log('🗺️ Map: Initializing...', { container: mapContainer });
 
-    const mapUrl = import.meta.env?.VITE_MAP_URL || 'http://10.10.1.205/';
-    console.log('🗺️ Map: Using tile server:', mapUrl);
+    try {
+      const initialTileX = 40755;
+      const initialTileY = 26136;
+      const initialZoom = 16;
 
-    L.tileLayer(mapUrl + '{z}/{x}/{y}.png', {
-      attribution: 'Map data &copy; OpenStreetMap contributors',
+      const initialCoords = tile2latlon(initialTileX, initialTileY, initialZoom);
+      console.log('🗺️ Map: Initial coordinates:', initialCoords);
+
+      const map = L.map(mapContainer).setView(initialCoords, initialZoom);
+      console.log('🗺️ Map: Map instance created successfully');
+
+    // Try custom tile server first, fallback to OpenStreetMap
+    const customMapUrl = import.meta.env?.VITE_MAP_URL || 'http://10.10.1.205/';
+    console.log('🗺️ Map: Trying custom tile server:', customMapUrl);
+
+    const customTileLayer = L.tileLayer(customMapUrl + '{z}/{x}/{y}.png', {
+      attribution: 'Custom Map Server',
       maxZoom: 23,
-      minZoom: 16
-    }).addTo(map);
+      minZoom: 16,
+      errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
+    });
+
+    // Fallback to OpenStreetMap if custom server fails
+    const osmTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    });
+
+    // Add custom tile layer first
+    customTileLayer.addTo(map);
+
+    // Add fallback error handling
+    customTileLayer.on('tileerror', function(e) {
+      console.log('🗺️ Map: Custom tile server failed, switching to OpenStreetMap');
+      map.removeLayer(customTileLayer);
+      osmTileLayer.addTo(map);
+    });
 
     const points = [
       { tileX: initialTileX, tileY: initialTileY, text: 'Point 1' },
@@ -67,10 +97,16 @@
       L.marker(latlng, { icon: textIcon }).addTo(map);
     });
 
-    // Dispatch mousemove events
-    map.on('mousemove', function (e) {
-      dispatch('mapmousemove', { latlng: e.latlng });
-    });
+      // Dispatch mousemove events
+      map.on('mousemove', function (e) {
+        dispatch('mapmousemove', { latlng: e.latlng });
+      });
+
+      console.log('🗺️ Map: Initialization complete');
+    } catch (error) {
+      console.error('❌ Map: Failed to initialize:', error);
+      mapContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: red;">❌ Map failed to load: ${error.message}</div>`;
+    }
   });
 </script>
 

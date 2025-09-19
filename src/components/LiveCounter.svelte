@@ -27,6 +27,10 @@
   let isLoading = true;
   let connectionStatus = 'connecting';
 
+  // Animation state
+  let animationInterval = null;
+  let isAnimating = false;
+
   // Subscription cleanup functions
   let unsubscribeFromData = null;
   let unsubscribeFromConnection = null;
@@ -69,11 +73,13 @@
     // Stop loading
     isLoading = false;
 
-    // Update count immediately - no complex animation
-    count = newCount;
-    displayCount = newCount;
+    // Update count with animation
+    if (newCount !== count) {
+      animateCountUp(displayCount, newCount);
+      count = newCount;
+    }
 
-    console.log(`✅ SIMPLE: Count updated! Now showing ${displayCount}`);
+    console.log(`✅ SIMPLE: Count updated! Now animating to ${newCount}`);
   }
 
   /**
@@ -94,10 +100,63 @@
   }
 
   /**
+   * Animate counter up from old value to new value
+   */
+  function animateCountUp(fromValue, toValue, duration = 1500) {
+    console.log(`🎬 ANIMATE: ${location.id} counting from ${fromValue} to ${toValue} over ${duration}ms`);
+
+    // Clear any existing animation
+    if (animationInterval) {
+      clearInterval(animationInterval);
+    }
+
+    // Skip animation if values are the same
+    if (fromValue === toValue) {
+      displayCount = toValue;
+      return;
+    }
+
+    isAnimating = true;
+    const startTime = Date.now();
+    const difference = toValue - fromValue;
+
+    // Start animation
+    animationInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Easing function for smooth animation (ease-out cubic)
+      const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+      const currentValue = Math.round(fromValue + (difference * easeOutCubic));
+
+      displayCount = currentValue;
+
+      if (progress >= 1) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+        displayCount = toValue; // Ensure final value is exact
+
+        // Brief flash effect when animation completes
+        setTimeout(() => {
+          isAnimating = false;
+        }, 200);
+
+        console.log(`✅ ANIMATE: ${location.id} animation complete at ${toValue}`);
+      }
+    }, 16); // ~60fps
+  }
+
+  /**
    * Simple cleanup function
    */
   function cleanup() {
     console.log(`🧹 SIMPLE LiveCounter: Cleaning up ${location.id}`);
+
+    // Clear animation
+    if (animationInterval) {
+      clearInterval(animationInterval);
+      animationInterval = null;
+    }
 
     if (unsubscribeFromData) {
       unsubscribeFromData();
@@ -172,7 +231,7 @@
           </div>
         </div>
       {:else}
-        <span class="counter-value">
+        <span class="counter-value" class:animating={isAnimating}>
           {displayCount.toLocaleString('en-US')}
         </span>
       {/if}
@@ -204,24 +263,46 @@
     background: #22c55e;
     animation: pulse 2s infinite;
   }
-  
+
   .activity-indicator.loading {
     background: #f59e0b;
     animation: pulse 1s infinite;
   }
-  
+
   .activity-indicator.error {
     background: #ef4444;
     animation: pulse 0.5s infinite;
   }
-  
+
   .activity-indicator.fallback {
     background: #f97316;
     animation: pulse 3s infinite;
   }
-  
+
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+  }
+
+  /* Counter animation styles */
+  .counter-value {
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .counter-value.animating {
+    color: #22c55e;
+    text-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+    transform: scale(1.05);
+  }
+
+  @keyframes countUpdate {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); color: #22c55e; }
+    100% { transform: scale(1); }
+  }
+
+  .counter-value.updated {
+    animation: countUpdate 0.6s ease;
   }
 </style>

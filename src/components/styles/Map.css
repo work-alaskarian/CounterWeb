@@ -1,8 +1,22 @@
 .map-container {
-    height: 50vh;
-    width: 80vh;
+    height: 500px;
+    width: 100%;
+    max-width: 800px;
     margin: 0 auto;
     border: 3px solid #16a085;
     border-radius: 15px;
     box-shadow: 0 4px 12px rgba(22, 160, 133, 0.15);
+    background-color: #f0f0f0;
+    position: relative;
+    min-height: 400px;
+  }
+
+  .map-container:empty::before {
+    content: "🗺️ Loading map...";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #666;
+    font-size: 16px;
   }
