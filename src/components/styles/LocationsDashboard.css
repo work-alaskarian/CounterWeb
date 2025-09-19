@@ -4,12 +4,7 @@
     box-sizing: border-box; 
   }
 
-  :global(body) {
-    font-family: 'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
-    color: #ffffff;
-    /* min-height: 100vh; */
-  }
+  /* Removed global body override to prevent conflicts with main app styling */
 
   .locations-header {
     display: flex;

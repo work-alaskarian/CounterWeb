@@ -1,22 +1,19 @@
 <script>
   import './styles/AnalyticsDashboard.css';
   import { onMount, onDestroy } from 'svelte';
-  import Chart from 'chart.js/auto';
   import DataTable from './DataTable.svelte';
   import ErrorBoundary from './ErrorBoundary.svelte';
   import LoadingState from './LoadingState.svelte';
   import { 
     analyticsSummary,
     loadAnalyticsSummary,
-    getAnalyticsChart,
-    getHistoryData,
     loadAllChartsData,
     chartData,
-    cameras,
     loadCameras
   } from '../lib/stores/analytics.js';
-  import analyticsAPI from '../lib/api/analytics.js';
-  
+  import { chartService } from '../lib/services/chartService.js';
+  import { mapTimeframeToApi } from '../lib/utils/timeframe.js';
+
   export let timeframe = 'Daily';
   
   let charts = {};
@@ -32,93 +29,58 @@
   let errorBoundary;
   let isInitializing = false;
   let hasInitialized = false;
-  let isVisible = false;
-  
-  // Component created - only show warnings and errors
-  
-  // Intersection Observer to detect when analytics section is visible
-  let analyticsSection;
   
   onMount(async () => {
-    // Find the analytics section
-    analyticsSection = document.getElementById('analytics');
-
-    if (analyticsSection) {
-      // Check if analytics section is already in view on page load
-      const rect = analyticsSection.getBoundingClientRect();
-      const isInView = rect.top < window.innerHeight && rect.bottom > 0;
-
-      if (isInView && !hasInitialized) {
-        // Analytics section is in view on page load, initialize immediately
-        console.log('📊 Analytics section in view on page load, initializing immediately');
-        isVisible = true;
-        initializeDashboard();
-      }
-
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting && !hasInitialized) {
-            console.log('📊 Analytics section became visible, initializing');
-            isVisible = true;
-            initializeDashboard();
-          }
-        });
-      }, {
-        rootMargin: '100px' // Start loading 100px before the section becomes visible
-      });
-
-      observer.observe(analyticsSection);
-
-      return () => {
-        observer.disconnect();
-      };
-    } else {
-      // Fallback: initialize immediately if section not found
-      console.warn('⚠️ Analytics section not found, initializing immediately');
+    const analyticsSection = document.getElementById('analytics');
+    if (!analyticsSection) {
       initializeDashboard();
+      return;
     }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !hasInitialized) {
+          initializeDashboard();
+        }
+      });
+    }, { rootMargin: '100px' });
+
+    observer.observe(analyticsSection);
+
+    return () => observer.disconnect();
   });
   
   async function initializeDashboard() {
     if (hasInitialized) return;
-    
+
+    console.log('🔄 AnalyticsDashboard: Starting initialization...');
     hasInitialized = true;
     isInitializing = true;
-    
+
     try {
-      // Load analytics summary
-      try {
-        await loadAnalyticsSummary(mapTimeframe(timeframe));
-      } catch (summaryError) {
-        console.error('❌ Failed to load analytics summary:', summaryError);
-      }
-      
-      // Load chart data
-      try {
-        await loadAllChartsData(mapTimeframe(timeframe));
-      } catch (chartError) {
-        console.error('❌ Failed to load chart data:', chartError);
-      }
-      
-      // Load cameras
-      try {
-        await loadCameras();
-      } catch (cameraError) {
-        console.error('❌ Failed to load cameras:', cameraError);
-      }
-      
-      // Initialize charts with current timeframe data
-      try {
-        console.log(`📊 Initializing charts with timeframe: ${timeframe}`);
+      const apiTimeframe = mapTimeframeToApi(timeframe);
+      console.log('📊 AnalyticsDashboard: Loading data for timeframe:', apiTimeframe);
 
-        // Wait for DOM elements to be ready
-        await new Promise(resolve => setTimeout(resolve, 100));
+      await Promise.all([
+        loadAnalyticsSummary(apiTimeframe).catch(err => {
+          console.warn('⚠️ AnalyticsDashboard: Failed to load analytics summary:', err);
+          return null;
+        }),
+        loadAllChartsData(apiTimeframe).catch(err => {
+          console.warn('⚠️ AnalyticsDashboard: Failed to load charts data:', err);
+          return null;
+        }),
+        loadCameras().catch(err => {
+          console.warn('⚠️ AnalyticsDashboard: Failed to load cameras:', err);
+          return null;
+        })
+      ]);
 
-        await initializeCharts();
-      } catch (chartInitError) {
-        console.error('❌ Chart initialization failed:', chartInitError);
-      }
-      
+      console.log('✅ AnalyticsDashboard: Data loading completed, initializing charts...');
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await initializeCharts();
+      console.log('✅ AnalyticsDashboard: Dashboard fully initialized');
+
     } catch (error) {
       console.error('❌ AnalyticsDashboard: Initialization failed:', error);
       initializationError = error;
@@ -128,386 +90,20 @@
   }
 
   onDestroy(() => {
-    // Clean up charts
-    Object.values(charts).forEach(chart => {
-      if (chart) chart.destroy();
-    });
+    Object.values(charts).forEach(chart => chartService.destroyChart(chart));
   });
-
-  // Map timeframe to API format
-  function mapTimeframe(tf) {
-    const mapping = {
-      'Hourly': 'HOURLY',
-      'Daily': 'DAILY',
-      'Weekly': 'WEEKLY', 
-      'Monthly': 'MONTHLY'
-    };
-    return mapping[tf] || 'DAILY';
-  }
   
   async function initializeCharts() {
-    try {
-      Chart.defaults.font.family = "'Cairo', 'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif";
-      Chart.defaults.font.size = 12;
-      
-      // Check for dark mode
-      const isDarkMode = document.documentElement.classList.contains('dark-mode');
-      Chart.defaults.color = isDarkMode ? '#e2e8f0' : '#2c3e50';
+    const isDarkMode = document.documentElement.classList.contains('dark-mode');
+    const configs = chartService.createAllChartConfigs($chartData, isDarkMode);
 
-      const chartOptions = {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {
-        intersect: false,
-        mode: 'index'
-      },
-      plugins: { 
-        legend: { 
-          labels: { 
-            usePointStyle: true, 
-            padding: 20, 
-            color: isDarkMode ? '#e2e8f0' : '#2c3e50',
-            font: {
-              size: 12,
-              family: 'Cairo, sans-serif'
-            }
-          } 
-        },
-        tooltip: {
-          backgroundColor: isDarkMode ? '#2d3748' : '#ffffff',
-          titleColor: isDarkMode ? '#e2e8f0' : '#2c3e50',
-          bodyColor: isDarkMode ? '#a0aec0' : '#7f8c8d',
-          borderColor: isDarkMode ? '#4a5568' : '#e1e8ed',
-          borderWidth: 1,
-          cornerRadius: 8,
-          titleFont: {
-            size: 14,
-            weight: 'bold',
-            family: 'Cairo, sans-serif'
-          },
-          bodyFont: {
-            size: 13,
-            family: 'Cairo, sans-serif'
-          },
-          displayColors: true,
-          boxPadding: 8,
-          padding: 12
-        }
-      },
-      scales: {
-        x: { 
-          grid: { 
-            color: isDarkMode ? 'rgba(226, 232, 240, 0.1)' : 'rgba(44, 62, 80, 0.1)', 
-            drawBorder: false 
-          }, 
-          ticks: { 
-            color: isDarkMode ? '#a0aec0' : '#7f8c8d',
-            font: {
-              size: 11,
-              family: 'Cairo, sans-serif'
-            }
-          },
-          border: {
-            color: isDarkMode ? 'rgba(226, 232, 240, 0.2)' : 'rgba(44, 62, 80, 0.2)'
-          }
-        },
-        y: { 
-          grid: { 
-            color: isDarkMode ? 'rgba(226, 232, 240, 0.1)' : 'rgba(44, 62, 80, 0.1)', 
-            drawBorder: false 
-          }, 
-          ticks: { 
-            color: isDarkMode ? '#a0aec0' : '#7f8c8d',
-            font: {
-              size: 11,
-              family: 'Cairo, sans-serif'
-            }
-          },
-          border: {
-            color: isDarkMode ? 'rgba(226, 232, 240, 0.2)' : 'rgba(44, 62, 80, 0.2)'
-          }
-        }
-      }
-    };
-
-    // Get real data from store, use fallback if empty
-    const visitorTrendsData = $chartData?.visitorTrends;
-    const locationDistributionData = $chartData?.locationDistribution;
-    const cameraPerformanceData = $chartData?.cameraPerformance;
-    
-    // Check for missing chart data
-    if (!visitorTrendsData?.labels?.length) {
-      console.warn('⚠️ No visitor trends data available');
-    }
-    if (!locationDistributionData?.labels?.length) {
-      console.warn('⚠️ No location distribution data available');
-    }
-    if (!cameraPerformanceData?.analytics_chart?.labels?.length) {
-      console.warn('⚠️ No camera performance data available');
-    }
-
-    // Show "No Data Available" when backend has no real data
-    const noDataVisitorChart = {
-      labels: ['لا توجد بيانات'],
-      datasets: [{
-        label: 'لا توجد بيانات متاحة',
-        data: [0],
-        borderColor: '#cccccc',
-        backgroundColor: 'rgba(204, 204, 204, 0.2)',
-        fill: true,
-        tension: 0.4
-      }]
-    };
-
-    const noDataLocationChart = {
-      labels: ['لا توجد بيانات'],
-      datasets: [{
-        data: [1],
-        backgroundColor: ['#cccccc'],
-        borderWidth: 0
-      }]
-    };
-
-    const noDataCameraChart = {
-      labels: ['لا توجد بيانات'],
-      datasets: [{
-        label: 'لا توجد بيانات متاحة',
-        data: [0],
-        backgroundColor: '#cccccc',
-        borderColor: '#cccccc',
-        borderWidth: 1
-      }]
-    };
-
-    const chartConfigs = {
-      trafficChart: { 
-        type: 'line', 
-        data: (visitorTrendsData && visitorTrendsData.labels && visitorTrendsData.labels.length > 0) ? {
-          labels: visitorTrendsData.labels,
-          datasets: visitorTrendsData.datasets.map((dataset, index) => ({
-            label: dataset.label || (index === 0 ? 'زوار الحرم' : 'الزوار الجدد'),
-            data: dataset.data || [],
-            borderColor: index === 0 ? '#16a085' : '#1abc9c',
-            backgroundColor: index === 0 ? 'rgba(22, 160, 133, 0.2)' : 'rgba(26, 188, 156, 0.2)',
-            fill: true,
-            tension: 0.4
-          }))
-        } : noDataVisitorChart, 
-        options: chartOptions 
-      },
-      demographicsChart: { 
-        type: 'doughnut', 
-        data: (locationDistributionData && locationDistributionData.labels && locationDistributionData.labels.length > 0) ? {
-          labels: locationDistributionData.labels,
-          datasets: [{
-            data: locationDistributionData.datasets?.[0]?.data || [0], 
-            backgroundColor: ['#16a085', '#1abc9c', '#48c9b0', '#76d7c4', '#85c1e9', '#f7dc6f', '#bb8fce'], 
-            borderWidth: 0 
-          }] 
-        } : noDataLocationChart, 
-        options: { 
-          responsive: true, 
-          maintainAspectRatio: false, 
-          interaction: {
-            intersect: false
-          },
-          plugins: { 
-            legend: { 
-              position: 'right', 
-              labels: { 
-                usePointStyle: true, 
-                color: isDarkMode ? '#e2e8f0' : '#2c3e50',
-                font: {
-                  size: 12,
-                  family: 'Cairo, sans-serif'
-                }
-              } 
-            },
-            tooltip: {
-              backgroundColor: isDarkMode ? '#2d3748' : '#ffffff',
-              titleColor: isDarkMode ? '#e2e8f0' : '#2c3e50',
-              bodyColor: isDarkMode ? '#a0aec0' : '#7f8c8d',
-              borderColor: isDarkMode ? '#4a5568' : '#e1e8ed',
-              borderWidth: 1,
-              cornerRadius: 8,
-              titleFont: {
-                size: 14,
-                weight: 'bold',
-                family: 'Cairo, sans-serif'
-              },
-              bodyFont: {
-                size: 13,
-                family: 'Cairo, sans-serif'
-              },
-              displayColors: true,
-              boxPadding: 8,
-              padding: 12
-            }
-          } 
-        } 
-      },
-      deviceChart: { 
-        type: 'bar', 
-        data: (cameraPerformanceData?.analytics_chart && cameraPerformanceData.analytics_chart.labels && cameraPerformanceData.analytics_chart.labels.length > 0) ? {
-          labels: cameraPerformanceData.analytics_chart.labels,
-          datasets: [{
-            label: 'إجمالي الإكتشافات',
-            data: cameraPerformanceData.analytics_chart.datasets?.[0]?.data || [0], 
-            backgroundColor: '#16a085',
-            borderColor: '#16a085',
-            borderWidth: 1 
-          }] 
-        } : noDataCameraChart, 
-        options: { 
-          responsive: true, 
-          maintainAspectRatio: false, 
-          interaction: {
-            intersect: false
-          },
-          plugins: { 
-            legend: { 
-              position: 'bottom', 
-              labels: { 
-                usePointStyle: true, 
-                color: isDarkMode ? '#e2e8f0' : '#2c3e50',
-                font: {
-                  size: 12,
-                  family: 'Cairo, sans-serif'
-                }
-              } 
-            },
-            tooltip: {
-              backgroundColor: isDarkMode ? '#2d3748' : '#ffffff',
-              titleColor: isDarkMode ? '#e2e8f0' : '#2c3e50',
-              bodyColor: isDarkMode ? '#a0aec0' : '#7f8c8d',
-              borderColor: isDarkMode ? '#4a5568' : '#e1e8ed',
-              borderWidth: 1,
-              cornerRadius: 8,
-              titleFont: {
-                size: 14,
-                weight: 'bold',
-                family: 'Cairo, sans-serif'
-              },
-              bodyFont: {
-                size: 13,
-                family: 'Cairo, sans-serif'
-              },
-              displayColors: true,
-              boxPadding: 8,
-              padding: 12
-            }
-          } 
-        } 
-      }
-    };
-
-      // Load real data for charts and create them
-      await loadChartsWithRealData(chartConfigs, chartOptions, isDarkMode);
-    } catch (error) {
-      console.error('❌ Chart initialization failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Load charts with real data from API
-   */
-  async function loadChartsWithRealData(chartConfigs, chartOptions, isDarkMode) {
-    isLoadingCharts = true;
-
-    try {
-      console.log(`📊 Loading charts data for timeframe: ${timeframe} (mapped: ${mapTimeframe(timeframe)})`);
-
-      // Load visitor trends chart with real data
-      const visitorTrendsData = await getAnalyticsChart('visitors_over_time', mapTimeframe(timeframe));
-      console.log('📊 Visitor trends data:', visitorTrendsData);
-
-      if (visitorTrendsData && visitorTrendsData.labels && visitorTrendsData.datasets) {
-        chartConfigs.trafficChart.data = {
-          labels: visitorTrendsData.labels,
-          datasets: visitorTrendsData.datasets.map((dataset, index) => ({
-            ...dataset,
-            borderColor: index === 0 ? '#16a085' : '#1abc9c',
-            backgroundColor: index === 0 ? 'rgba(22, 160, 133, 0.2)' : 'rgba(26, 188, 156, 0.2)',
-            fill: true,
-            tension: 0.4
-          }))
-        };
-      } else {
-        // Use fallback empty data structure
-        chartConfigs.trafficChart.data = {
-          labels: ['لا توجد بيانات'],
-          datasets: [{
-            label: 'الزوار',
-            data: [0],
-            borderColor: '#16a085',
-            backgroundColor: 'rgba(22, 160, 133, 0.2)',
-            fill: true
-          }]
-        };
-      }
-
-      // Load location distribution and device analytics if available
-      const supportedChartTypes = ['location_distribution', 'device_stats'];
-      await Promise.all(supportedChartTypes.map(async (type) => {
-        try {
-          console.log(`📊 Loading ${type} chart data...`);
-          const data = await getAnalyticsChart(type, mapTimeframe(timeframe));
-          console.log(`📊 ${type} data:`, data);
-
-          if (data && data.labels && data.datasets) {
-            // Map to existing chart names if they exist
-            const chartMapping = {
-              'location_distribution': 'demographicsChart',
-              'device_stats': 'deviceChart'
-            };
-
-            const chartKey = chartMapping[type];
-            if (chartKey && chartConfigs[chartKey]) {
-              chartConfigs[chartKey].data = {
-                labels: data.labels,
-                datasets: data.datasets
-              };
-              console.log(`✅ ${type} chart data loaded successfully`);
-            }
-          } else {
-            console.warn(`⚠️ No data returned for ${type} chart`);
-          }
-        } catch (error) {
-          console.warn(`⚠️ Using no-data placeholder for ${type} chart:`, error.message);
-        }
-      }));
-
-    } catch (error) {
-      console.error('Failed to load chart data:', error);
-    }
-
-    // Create all charts - destroy existing first
-    console.log(`📊 Creating charts:`, Object.keys(chartConfigs));
-    Object.keys(chartConfigs).forEach(id => {
+    Object.keys(configs).forEach(id => {
       const canvas = document.getElementById(id);
-      if (canvas) {
-        console.log(`📊 Creating chart: ${id}`);
-
-        // Destroy existing chart if it exists
-        if (charts[id]) {
-          console.log(`📊 Destroying existing chart: ${id}`);
-          charts[id].destroy();
-        }
-
-        try {
-          charts[id] = new Chart(canvas, chartConfigs[id]);
-          console.log(`✅ Chart created successfully: ${id}`);
-        } catch (error) {
-          console.error(`❌ Failed to create chart ${id}:`, error);
-        }
-      } else {
-        console.warn(`⚠️ Canvas not found for chart: ${id}`);
+      if (charts[id]) {
+        chartService.destroyChart(charts[id]);
       }
+      charts[id] = chartService.createChart(canvas, configs[id]);
     });
-
-    isLoadingCharts = false;
-    console.log('✅ All charts creation completed');
   }
   
   function toggleCustomizeModal() {
@@ -526,38 +122,27 @@
     viewMode = viewMode === 'grid' ? 'table' : 'grid';
   }
   
-  function handleDataExport(event) {
+  function handleDataExport() {
     // Export data silently
   }
 
-  // Reactive statements to handle timeframe changes
-  $: if (timeframe && hasInitialized) {
-    console.log(`📊 Timeframe changed to ${timeframe}, refreshing analytics data`);
-    loadAnalyticsSummary(mapTimeframe(timeframe));
-    refreshCharts();
+  $: if (timeframe && hasInitialized && !isInitializing) {
+    refreshAnalytics();
   }
 
-  async function refreshCharts() {
-    if (isLoadingCharts || !hasInitialized) return;
+  async function refreshAnalytics() {
+    if (isLoadingCharts) return;
+    isLoadingCharts = true;
 
     try {
-      console.log(`📊 Refreshing charts for timeframe: ${timeframe}`);
-
-      // Destroy existing charts
-      Object.values(charts).forEach(chart => {
-        if (chart) chart.destroy();
-      });
-      charts = {};
-
-      // Load fresh chart data
-      await loadAllChartsData(mapTimeframe(timeframe));
-
-      // Re-initialize with new data
+      const apiTimeframe = mapTimeframeToApi(timeframe);
+      await loadAnalyticsSummary(apiTimeframe);
+      await loadAllChartsData(apiTimeframe);
       await initializeCharts();
-
-      console.log('✅ Charts refreshed successfully');
     } catch (error) {
-      console.error('❌ Failed to refresh charts:', error);
+      console.error('❌ Failed to refresh analytics:', error);
+    } finally {
+      isLoadingCharts = false;
     }
   }
 </script>

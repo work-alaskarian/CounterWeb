@@ -2,7 +2,7 @@
   import './styles/Chart.css';
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import Chart from 'chart.js/auto';
-  import 'chartjs-adapter-date-fns';
+  // import 'chartjs-adapter-date-fns'; // Temporarily disabled - causing bundle issues
   
   
   const dispatch = createEventDispatcher();
@@ -47,6 +47,10 @@
     const isDarkMode = document.documentElement.classList.contains('dark-mode');
     
     // Generate initial data if none provided
+    function generateInitialData() {
+      return Array(10).fill(0).map(() => Math.floor(Math.random() * 50));
+    }
+
     const initialData = data.length > 0 ? data : generateInitialData();
     const initialLabels = labels.length > 0 ? labels : Array(initialData.length).fill('');
     
@@ -129,20 +133,13 @@
     chart = new Chart(ctx, chartConfig);
   }
   
-  function generateInitialData() {
-    const points = 30;
-    const data = [];
-    let value = 100;
-    
-    for (let i = 0; i < points; i++) {
-      value += (Math.random() - 0.5) * 20;
-      data.push(Math.max(0, value));
-    }
-    
-    return data;
-  }
+  
   
   function generateSvgData() {
+    function generateInitialData() {
+      return Array(10).fill(0).map(() => Math.floor(Math.random() * 50));
+    }
+
     const points = data.length > 0 ? data : generateInitialData();
     const width = 100;
     const height = 40;

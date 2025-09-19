@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Debug Data Flow - CounterWeb</title>
+    <style>
+        body {
+            font-family: 'Cairo', Arial, sans-serif;
+            margin: 20px;
+            background: #f8f9fa;
+            direction: rtl;
+        }
+        .debug-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #16a085;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .log {
+            background: #f1f3f4;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: inline-block;
+            margin: 5px 0;
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.connecting { background: #fff3cd; color: #856404; }
+        .count-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #16a085;
+            margin: 10px 0;
+        }
+        .locations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .location-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .location-card.has-data {
+            border-color: #16a085;
+            background: #e8f5f0;
+        }
+        .btn {
+            background: #16a085;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #138f75;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-section">
+        <h1>🔍 CounterWeb Data Flow Debug</h1>
+        <p>تحليل سير البيانات من WebSocket إلى واجهة المستخدم</p>
+
+        <div>
+            <button class="btn" onclick="loadApp()">تحميل التطبيق</button>
+            <button class="btn" onclick="clearLogs()">مسح السجلات</button>
+            <button class="btn" onclick="testWebSocket()">اختبار WebSocket</button>
+        </div>
+    </div>
+
+    <div class="debug-section">
+        <h3>📊 حالة الاتصال</h3>
+        <div id="connection-status" class="status disconnected">غير متصل</div>
+        <div id="websocket-url"></div>
+    </div>
+
+    <div class="debug-section">
+        <h3>🏪 المواقع المحملة</h3>
+        <div id="locations-count" class="count-display">0 مواقع</div>
+        <div id="locations-grid" class="locations-grid"></div>
+    </div>
+
+    <div class="debug-section">
+        <h3>🔥 الرسائل المباشرة</h3>
+        <div id="live-messages-count" class="count-display">0 رسائل</div>
+        <div id="live-messages" class="log"></div>
+    </div>
+
+    <div class="debug-section">
+        <h3>📋 سجل التطبيق</h3>
+        <div id="app-logs" class="log"></div>
+    </div>
+
+    <script>
+        // Override console.log to capture logs
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+
+        function addLog(level, ...args) {
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.map(arg =>
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+
+            const logElement = document.getElementById('app-logs');
+            const logEntry = document.createElement('div');
+            logEntry.style.color = level === 'error' ? '#dc3545' : level === 'warn' ? '#ffc107' : '#333';
+            logEntry.innerHTML = `<strong>[${timestamp}] ${level.toUpperCase()}:</strong> ${message}`;
+            logElement.appendChild(logEntry);
+            logElement.scrollTop = logElement.scrollHeight;
+
+            // Also call original function
+            if (level === 'error') originalError(...args);
+            else if (level === 'warn') originalWarn(...args);
+            else originalLog(...args);
+        }
+
+        console.log = (...args) => addLog('log', ...args);
+        console.error = (...args) => addLog('error', ...args);
+        console.warn = (...args) => addLog('warn', ...args);
+
+        let appLoaded = false;
+        let stores = null;
+
+        function clearLogs() {
+            document.getElementById('app-logs').innerHTML = '';
+            document.getElementById('live-messages').innerHTML = '';
+            document.getElementById('live-messages-count').textContent = '0 رسائل';
+        }
+
+        async function loadApp() {
+            if (appLoaded) {
+                console.log('⚠️ التطبيق محمل مسبقاً');
+                return;
+            }
+
+            try {
+                console.log('🔄 بدء تحميل التطبيق...');
+
+                // Import the bundle
+                const bundleScript = document.createElement('script');
+                bundleScript.src = '/build/bundle.js';
+                bundleScript.onload = () => {
+                    console.log('✅ Bundle loaded successfully');
+
+                    // Try to access Svelte stores
+                    setTimeout(() => {
+                        try {
+                            // Access the store from window (if exposed) or try other methods
+                            if (window.app && window.app.$$.ctx) {
+                                console.log('✅ Svelte app instance found');
+                                monitorStores();
+                            } else {
+                                console.warn('⚠️ Svelte app not accessible, trying alternative method...');
+                                // Alternative: manually import analytics functions
+                                importAnalyticsStore();
+                            }
+                        } catch (error) {
+                            console.error('❌ Error accessing Svelte app:', error);
+                        }
+                    }, 2000);
+                };
+                bundleScript.onerror = () => {
+                    console.error('❌ Failed to load bundle.js');
+                };
+                document.head.appendChild(bundleScript);
+
+                appLoaded = true;
+            } catch (error) {
+                console.error('❌ Error loading app:', error);
+            }
+        }
+
+        function importAnalyticsStore() {
+            // Since we can't directly import ES modules in this context,
+            // we'll monitor global variables or use postMessage
+            console.log('🔍 محاولة الوصول للمتاجر...');
+
+            // Check if analytics functions are available globally
+            if (typeof window.testWebSocket !== 'undefined') {
+                console.log('✅ Found testWebSocket helper');
+                stores = window.testWebSocket;
+                monitorStores();
+            } else {
+                console.warn('⚠️ Analytics store not accessible globally');
+                // Fallback: monitor DOM changes and WebSocket events
+                monitorDOMChanges();
+            }
+        }
+
+        function monitorStores() {
+            console.log('🔍 بدء مراقبة المتاجر...');
+
+            if (stores && stores.status) {
+                // Monitor connection status
+                setInterval(() => {
+                    stores.status();
+                }, 5000);
+            }
+
+            // Monitor for WebSocket messages
+            monitorWebSocketMessages();
+        }
+
+        function monitorDOMChanges() {
+            console.log('🔍 مراقبة تغييرات DOM...');
+
+            // Monitor for counter elements
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'childList') {
+                        // Check for counter elements
+                        const counters = document.querySelectorAll('.count-value, .live-count, .display-count');
+                        if (counters.length > 0) {
+                            console.log(`📊 Found ${counters.length} counter elements`);
+                            counters.forEach((counter, index) => {
+                                console.log(`   Counter ${index + 1}: ${counter.textContent || counter.innerText}`);
+                            });
+                        }
+
+                        // Check for location elements
+                        const locations = document.querySelectorAll('.location-card, .location-wrapper');
+                        updateLocationsDisplay(locations.length);
+                    }
+                });
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        }
+
+        let messageCount = 0;
+        function monitorWebSocketMessages() {
+            // Monitor for WebSocket events
+            const originalWebSocket = window.WebSocket;
+            window.WebSocket = function(url, protocols) {
+                console.log(`🔌 WebSocket connection to: ${url}`);
+                document.getElementById('websocket-url').textContent = `URL: ${url}`;
+
+                const ws = new originalWebSocket(url, protocols);
+
+                ws.addEventListener('open', (event) => {
+                    console.log('✅ WebSocket connected');
+                    updateConnectionStatus('connected');
+                });
+
+                ws.addEventListener('close', (event) => {
+                    console.log(`🔌 WebSocket disconnected: ${event.code} - ${event.reason}`);
+                    updateConnectionStatus('disconnected');
+                });
+
+                ws.addEventListener('error', (event) => {
+                    console.error('❌ WebSocket error:', event);
+                    updateConnectionStatus('disconnected');
+                });
+
+                ws.addEventListener('message', (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        messageCount++;
+                        console.log(`📨 WebSocket message #${messageCount}:`, data);
+
+                        // Display live message
+                        addLiveMessage(data);
+
+                        // Check if it's a live count update
+                        if (data.type === 'live_count_update' || data.event === 'liveUpdate') {
+                            const locationId = data.location_id || data.locationId;
+                            const count = data.live_count || data.liveCount;
+                            console.log(`🔥 LIVE COUNT UPDATE: ${locationId} = ${count}`);
+                        }
+                    } catch (error) {
+                        console.error('❌ Error parsing WebSocket message:', error);
+                    }
+                });
+
+                return ws;
+            };
+        }
+
+        function updateConnectionStatus(status) {
+            const element = document.getElementById('connection-status');
+            element.className = `status ${status}`;
+            element.textContent = status === 'connected' ? 'متصل' :
+                                 status === 'connecting' ? 'جاري الاتصال' : 'غير متصل';
+        }
+
+        function updateLocationsDisplay(count) {
+            document.getElementById('locations-count').textContent = `${count} مواقع`;
+        }
+
+        function addLiveMessage(data) {
+            const messagesElement = document.getElementById('live-messages');
+            const messageElement = document.createElement('div');
+            messageElement.style.marginBottom = '10px';
+            messageElement.style.padding = '8px';
+            messageElement.style.background = '#e8f5f0';
+            messageElement.style.borderRadius = '4px';
+            messageElement.style.borderLeft = '3px solid #16a085';
+
+            const timestamp = new Date().toLocaleTimeString();
+            const messageContent = JSON.stringify(data, null, 2);
+            messageElement.innerHTML = `<strong>[${timestamp}] ${data.type || data.event || 'unknown'}:</strong><br><pre style="font-size: 11px; margin: 5px 0;">${messageContent}</pre>`;
+
+            messagesElement.insertBefore(messageElement, messagesElement.firstChild);
+
+            // Keep only last 20 messages
+            while (messagesElement.children.length > 20) {
+                messagesElement.removeChild(messagesElement.lastChild);
+            }
+
+            // Update message count
+            document.getElementById('live-messages-count').textContent = `${messageCount} رسائل`;
+        }
+
+        function testWebSocket() {
+            console.log('🧪 اختبار اتصال WebSocket...');
+
+            // Test connection to WebSocket
+            const wsUrl = 'ws://10.10.1.234:8080';  // Replace with your actual WebSocket URL
+
+            try {
+                const testWs = new WebSocket(wsUrl);
+
+                testWs.onopen = () => {
+                    console.log('✅ Test WebSocket connected successfully');
+
+                    // Send a test message
+                    const testMessage = {
+                        type: 'test',
+                        timestamp: new Date().toISOString()
+                    };
+                    testWs.send(JSON.stringify(testMessage));
+
+                    // Close after 5 seconds
+                    setTimeout(() => {
+                        testWs.close();
+                    }, 5000);
+                };
+
+                testWs.onerror = (error) => {
+                    console.error('❌ Test WebSocket connection failed:', error);
+                };
+
+                testWs.onmessage = (event) => {
+                    console.log('📨 Test WebSocket message:', event.data);
+                };
+
+                testWs.onclose = () => {
+                    console.log('🔌 Test WebSocket closed');
+                };
+
+            } catch (error) {
+                console.error('❌ Test WebSocket error:', error);
+            }
+        }
+
+        // Start monitoring immediately
+        console.log('🚀 Debug page loaded - ready for testing');
+        monitorWebSocketMessages();
+
+        // Auto-load app after 1 second
+        setTimeout(() => {
+            loadApp();
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Debug Test</title>
+</head>
+<body>
+  <h1>Debug Test</h1>
+  <div id="test-output">Loading...</div>
+
+  <script>
+    console.log('🧪 Debug test script running');
+    document.getElementById('test-output').textContent = 'JavaScript is working!';
+
+    // Test if bundle.js loads
+    fetch('/build/bundle.js')
+      .then(response => {
+        console.log('📦 Bundle.js response:', response.status);
+        return response.text();
+      })
+      .then(text => {
+        console.log('📦 Bundle.js size:', text.length);
+        const hasError = text.includes('ERROR') || text.includes('SyntaxError');
+        console.log('📦 Bundle.js has errors:', hasError);
+
+        if (hasError) {
+          document.getElementById('test-output').innerHTML += '<br>❌ Bundle has syntax errors';
+        } else {
+          document.getElementById('test-output').innerHTML += '<br>✅ Bundle looks clean';
+        }
+      })
+      .catch(error => {
+        console.error('❌ Bundle test failed:', error);
+        document.getElementById('test-output').innerHTML += '<br>❌ Failed to load bundle';
+      });
+  </script>
+</body>
+</html>

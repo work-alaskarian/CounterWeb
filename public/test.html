@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test</title>
+</head>
+<body>
+  <h1>Testing Bundle</h1>
+  <div id="app"></div>
+
+  <script>
+    console.log('Test page loaded');
+
+    // Load bundle.js
+    const script = document.createElement('script');
+    script.src = '/build/bundle.js';
+    script.onload = () => {
+      console.log('Bundle loaded successfully');
+    };
+    script.onerror = (error) => {
+      console.error('Bundle failed to load:', error);
+    };
+    document.head.appendChild(script);
+
+    // Catch any errors
+    window.addEventListener('error', (event) => {
+      console.error('Runtime error:', event.error);
+      document.body.innerHTML += `<pre style="color: red;">Error: ${event.error?.message || event.message}</pre>`;
+    });
+  </script>
+</body>
+</html>

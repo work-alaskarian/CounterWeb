@@ -1,10 +1,15 @@
 <script>
+	console.log('🔍 APP: Script starting...');
+
+	// Temporarily disabled problematic components
 	import LiveCounter from './components/LiveCounter.svelte';
 	import LocationsDashboard from './components/LocationsDashboard.svelte';
 	import AnalyticsDashboard from './components/AnalyticsDashboard.svelte';
 	import Map from './components/Map.svelte';
 	import WebSocketLog from './components/WebSocketLog.svelte';
-	import ConnectionBanner from './components/ConnectionBanner.svelte';
+	// import ConnectionBanner from './components/ConnectionBanner.svelte';
+
+	console.log('🔍 APP: All imports loaded');
 	// import CoordinatesDisplay from './components/CoordinatesDisplay.svelte';
 
 	let currentPage = 'live-counter';
@@ -63,21 +68,27 @@
 	function changeTimeframe(newTimeframe) {
 		timeframe = newTimeframe;
 		localStorage.setItem('timeframe', newTimeframe);
-		
-		// Update live WebSocket timeframe for real-time updates
-		updateLiveTimeframe(newTimeframe);
-		
-		console.log(`📅 Timeframe changed to: ${newTimeframe} (saved to localStorage)`);
+
+		// Update global WebSocket service with new timeframe (close and reconnect)
+		const timeframeMap = {
+			'Hourly': 'HOURLY',
+			'Daily': 'DAILY',
+			'Weekly': 'WEEKLY',
+			'Monthly': 'MONTHLY'
+		};
+		const backendTimeframe = timeframeMap[newTimeframe] || 'HOURLY';
+		globalWebSocketService.updateTimeframe(backendTimeframe);
+
+		console.log(`📅 SIMPLE: Timeframe changed to: ${newTimeframe} (${backendTimeframe}) - WebSocket will reconnect`);
 	}
 
 	// Add scroll listener
 	import { onMount, onDestroy } from 'svelte';
-	import { 
-		setupRealTimeUpdates,
-		updateLiveTimeframe
-	} from './lib/stores/analytics.js';
+	import {
+		loadLocations
+	} from './lib/stores/analytics-simple.js';
+	import globalWebSocketService from './lib/services/global-websocket.js';
 	
-	let unsubscribeRealTime = null;
 	
 	onMount(async () => {
 		console.log('🔄 CounterWeb App mounting...', {
@@ -110,18 +121,21 @@
 		});
 		
 		try {
-			console.log('⏰ Setting up global real-time WebSocket connection...');
-			
-			// Set initial timeframe for WebSocket
-			updateLiveTimeframe(timeframe);
-			
-			unsubscribeRealTime = setupRealTimeUpdates(timeframe);
-			console.log('✅ Global real-time connection setup complete');
-			
-			console.log('✅ CounterWeb app ready! Components will load their own data.');
+			// Load initial locations data first
+			console.log('🔄 SIMPLE: Loading initial locations...');
+			await loadLocations();
+			console.log('✅ SIMPLE: Locations loaded successfully');
+
+			console.log('⏰ SIMPLE: Setting up global real-time WebSocket connection...');
+
+			// Connect to global WebSocket service
+			globalWebSocketService.connect();
+			console.log('✅ SIMPLE: Global real-time connection setup complete');
+
+			console.log('✅ SIMPLE: CounterWeb app ready! Components will load their own data.');
 		} catch (error) {
-			console.error('❌ Failed to setup WebSocket:', error);
-			console.log('⚠️ Components will work without real-time updates');
+			console.error('❌ SIMPLE: Failed to initialize app:', error);
+			console.log('⚠️ SIMPLE: Components will work with limited functionality');
 		}
 
 		window.addEventListener('scroll', handleScroll);
@@ -131,14 +145,13 @@
 	});
 
 	onDestroy(() => {
-		if (unsubscribeRealTime) {
-			unsubscribeRealTime();
-		}
+		// Disconnect global WebSocket service
+		globalWebSocketService.disconnect();
 	});
 
 	// Props for the single LiveCounter (formerly LocationCard)
-	// Use all data combined for the hero display - shows total from all regional locations
-	const mainLocation = { id: 'all-data', name: 'جميع البيانات' };
+	// Use all locations aggregated data for the hero display
+	const mainLocation = { id: 'all', name: 'جميع البيانات' };
 	const displayTheme = { color: '#16a085', rgb: '22, 160, 133' };
 	let displayTimeframe = 'Hourly'; // Can be made reactive if needed
 
@@ -146,7 +159,7 @@
 
 <div class="app">
 	<!-- Connection Status Banner -->
-	<ConnectionBanner />
+	<!-- <ConnectionBanner /> -->
 	
 	<!-- Navigation Header -->
 	<header class="navigation-header">
@@ -277,7 +290,9 @@
 		color: #2c3e50;
 		direction: rtl;
 		transition: background-color 0.3s ease, color 0.3s ease;
-		/* min-height: 100vh; */
+		min-height: 100vh;
+		visibility: visible !important;
+		opacity: 1 !important;
 	}
 
 	:global(.dark-mode body) {
@@ -286,9 +301,11 @@
 	}
 
 	.app {
-		/* min-height: 100vh; */
-		display: flex;
+		min-height: 100vh;
+		display: flex !important;
 		flex-direction: column;
+		visibility: visible !important;
+		opacity: 1 !important;
 	}
 
 	.navigation-header {
@@ -685,12 +702,25 @@
 		}
 	}
 
+	/* Placeholder styling */
+	.placeholder {
+		background: rgba(22, 160, 133, 0.1);
+		border: 2px dashed #16a085;
+		padding: 60px 20px;
+		text-align: center;
+		margin: 20px 0;
+		border-radius: 10px;
+		color: #16a085;
+		font-size: 18px;
+		font-weight: 500;
+	}
+
 	/* Desktop Responsive */
 	@media (min-width: 1024px) {
 		.navigation-header {
 			padding: 20px 40px;
 		}
-		
+
 		.page-content {
 			padding-top: 100px;
 		}

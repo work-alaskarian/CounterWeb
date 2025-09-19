@@ -16,6 +16,12 @@
   }
 // 26136
   onMount(() => {
+    if (typeof L === 'undefined') {
+      console.error('❌ Map: Leaflet library not loaded');
+      return;
+    }
+
+    console.log('🗺️ Map: Initializing...');
     const initialTileX = 40755;
     const initialTileY = 26136;
     const initialZoom = 16;
@@ -23,7 +29,10 @@
     const initialCoords = tile2latlon(initialTileX, initialTileY, initialZoom);
     const map = L.map(mapContainer).setView(initialCoords, initialZoom);
 
-    L.tileLayer(process.env.MAP_URL + '{z}/{x}/{y}.png', {
+    const mapUrl = import.meta.env?.VITE_MAP_URL || 'http://10.10.1.205/';
+    console.log('🗺️ Map: Using tile server:', mapUrl);
+
+    L.tileLayer(mapUrl + '{z}/{x}/{y}.png', {
       attribution: 'Map data &copy; OpenStreetMap contributors',
       maxZoom: 23,
       minZoom: 16
@@ -67,13 +76,4 @@
 
 <div bind:this={mapContainer} class="map-container"></div>
 
-<style>
-  .map-container {
-    height: 50vh;
-    width: 80vh;
-    margin: 0 auto;
-    border: 3px solid #16a085;
-    border-radius: 15px;
-    box-shadow: 0 4px 12px rgba(22, 160, 133, 0.15);
-  }
-</style>
+

@@ -22,9 +22,40 @@
 	<!-- Then the heat plugin -->
 	<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 	
-	<script defer src='/build/bundle.js'></script>
-</head>
+	</head>
 
 <body>
+	<div id="error-log" style="color: red; padding: 10px;"></div>
+
+	<script>
+		console.log('🔍 HTML: Before loading bundle.js');
+
+		window.addEventListener('error', (e) => {
+			console.error('❌ Runtime error:', e.error, e.message, e.filename, e.lineno);
+			document.getElementById('error-log').innerHTML +=
+				'<div>❌ Error: ' + e.message + ' (Line: ' + e.lineno + ')</div>';
+		});
+
+		// Show when bundle starts loading
+		console.log('🔍 HTML: Loading bundle.js...');
+	</script>
+
+	<script src='/build/bundle.js'></script>
+
+	<script>
+		console.log('🔍 HTML: After bundle.js loaded');
+
+		// Check if body has content after 1 second
+		setTimeout(() => {
+			const bodyContent = document.body.innerHTML;
+			if (bodyContent.includes('Very Simple Test') || bodyContent.includes('42')) {
+				console.log('✅ App loaded successfully!');
+			} else {
+				console.log('❌ App did not load. Body content:', bodyContent.substring(0, 200));
+				document.getElementById('error-log').innerHTML +=
+					'<div>❌ App did not mount. Bundle loaded but app not visible.</div>';
+			}
+		}, 1000);
+	</script>
 </body>
 </html>

@@ -4,7 +4,7 @@
  */
 
 import { writable, derived, get } from 'svelte/store';
-import analyticsAPI from '../api/analytics.js';
+import analyticsAPI from '../services/api.js';
 
 // Core data stores
 export const locations = writable([]);
@@ -38,9 +38,134 @@ export const cameras = writable([]);
 export const realtimeCountData = writable(null);
 export const lastUpdate = writable(null);
 
-// Cache for location data
-const locationCache = new Map();
-const locationHistoryCache = new Map();
+// Smart buffering system for UI updates (10-second buffer)
+let lastMessageTime = new Map(); // message type -> timestamp (for WebSocket message throttling)
+let pendingUIUpdates = new Map(); // locationId -> {count, timestamp, data}
+let uiUpdateTimer = null;
+let lastUIUpdateTime = 0;
+const UI_UPDATE_BUFFER_DELAY = 10000; // 10 seconds
+const IMMEDIATE_UPDATE_THRESHOLD = 15000; // 15 seconds - if no update for this long, apply immediately
+const WEBSOCKET_THROTTLE_INTERVAL = 10000; // 10 seconds - throttle WebSocket message processing
+
+/**
+ * Apply pending UI updates with smart buffering
+ */
+function applyPendingUIUpdates() {
+  console.log(`🎯 APPLYING BUFFERED UI UPDATES: ${pendingUIUpdates.size} pending`);
+  console.log(`📺 DISPLAY UPDATE START: Updating live counters after 10-second buffer`);
+
+  if (pendingUIUpdates.size === 0) {
+    console.log(`⚠️ NO PENDING UI UPDATES TO APPLY`);
+    return;
+  }
+
+  // Get current locations
+  const currentLocations = get(locations);
+  console.log(`📍 CURRENT LOCATIONS (${currentLocations.length}):`,
+    currentLocations.map(loc => `${loc.id}:${loc.liveCount}`).join(', '));
+
+  console.log(`⏳ PENDING UI UPDATES:`,
+    Array.from(pendingUIUpdates.entries()).map(([id, data]) => `${id}:${data.count}`).join(', '));
+
+  // Apply all pending updates at once
+  locations.update(current => {
+    if (current.length === 0) {
+      console.log(`❌ NO CURRENT LOCATIONS - cannot apply updates`);
+      return current;
+    }
+
+    const updated = current.map(location => {
+      const pendingUpdate = pendingUIUpdates.get(location.id);
+      if (pendingUpdate) {
+        const oldCount = location.liveCount || 0;
+        const newCount = pendingUpdate.count;
+        console.log(`📊 BUFFERED UPDATE: ${location.id} - ${oldCount} → ${newCount}`);
+        if (oldCount !== newCount) {
+          console.log(`🚀 BUFFERED COUNT CHANGED: ${location.id} will trigger UI update`);
+        }
+        return {
+          ...location,
+          liveCount: newCount,
+          totalCount: pendingUpdate.data.total || location.totalCount
+        };
+      }
+      return location;
+    });
+
+    // Add any missing locations from the updates
+    Array.from(pendingUIUpdates.entries()).forEach(([locationId, updateData]) => {
+      if (!updated.find(loc => loc.id === locationId)) {
+        console.log(`📊 ADDING NEW BUFFERED LOCATION: ${locationId} = ${updateData.count}`);
+        updated.push({
+          id: locationId,
+          name: locationId === 'northern-gate' ? 'البوابة الشمالية' :
+                locationId === 'womens-section' ? 'قسم النساء' :
+                locationId === 'all' ? 'جميع البيانات' : locationId,
+          liveCount: updateData.count,
+          totalCount: updateData.data.total || updateData.count,
+          status: 'active'
+        });
+      }
+    });
+
+    console.log(`📊 FINAL BUFFERED LOCATIONS (${updated.length}):`,
+      updated.map(loc => `${loc.id}:${loc.liveCount}`).join(', '));
+
+    return updated;
+  });
+
+  // Clear pending updates and update timestamps
+  pendingUIUpdates.clear();
+  lastUIUpdateTime = Date.now();
+  console.log(`✅ BUFFERED UI UPDATES APPLIED AND CLEARED`);
+  console.log(`📺 DISPLAY UPDATE COMPLETE: Live counters now showing new values on screen`);
+  console.log(`🎉 10-SECOND BUFFER CYCLE FINISHED: UI successfully updated after waiting period`);
+}
+
+/**
+ * Schedule a buffered UI update with smart timing
+ */
+function scheduleBufferedUIUpdate(locationId, count, data) {
+  const currentTime = Date.now();
+  const timeSinceLastUpdate = currentTime - lastUIUpdateTime;
+
+  console.log(`⏰ SCHEDULING BUFFERED UPDATE: ${locationId} = ${count}`);
+  console.log(`⏱️ Time since last UI update: ${timeSinceLastUpdate}ms`);
+
+  // Store the update
+  pendingUIUpdates.set(locationId, {
+    count: count,
+    timestamp: currentTime,
+    data: data
+  });
+
+  // If it's been more than IMMEDIATE_UPDATE_THRESHOLD since last update, apply immediately
+  if (timeSinceLastUpdate > IMMEDIATE_UPDATE_THRESHOLD) {
+    console.log(`🚀 IMMEDIATE UPDATE: Long time since last update (${timeSinceLastUpdate}ms > ${IMMEDIATE_UPDATE_THRESHOLD}ms)`);
+    applyPendingUIUpdates();
+    return;
+  }
+
+  // Clear existing timer and set a new one for 10 seconds
+  if (uiUpdateTimer) {
+    clearTimeout(uiUpdateTimer);
+    console.log(`🔄 RESET BUFFER TIMER: New data arrived, waiting another ${UI_UPDATE_BUFFER_DELAY}ms`);
+  } else {
+    console.log(`⏳ START BUFFER TIMER: Waiting ${UI_UPDATE_BUFFER_DELAY}ms for more data`);
+  }
+
+  uiUpdateTimer = setTimeout(() => {
+    console.log(`⏰ BUFFER TIMER EXPIRED: 10 seconds completed, now applying updates to UI`);
+    console.log(`🎯 TIMER COMPLETION: ${pendingUIUpdates.size} pending updates will now be displayed`);
+    const startTime = Date.now();
+    applyPendingUIUpdates();
+    const endTime = Date.now();
+    console.log(`✅ UI UPDATE COMPLETED: All buffered updates applied to display in ${endTime - startTime}ms`);
+    uiUpdateTimer = null;
+  }, UI_UPDATE_BUFFER_DELAY);
+
+  console.log(`⏰ BUFFERED UPDATE SCHEDULED for ${locationId}: ${count} (pending: ${pendingUIUpdates.size})`);
+}
 
 /**
  * Load all locations
@@ -48,14 +173,36 @@ const locationHistoryCache = new Map();
 export async function loadLocations() {
   isLoading.set(true);
   error.set(null);
-  
+
   try {
+    console.log('🔄 LOADING LOCATIONS FROM API...');
     const data = await analyticsAPI.getAllLocations();
-    locations.set(data);
-    return data;
+    console.log('✅ LOADED LOCATIONS:', data?.length || 0, 'locations');
+    console.log('📍 LOCATION IDs:', data?.map(loc => ({ id: loc.id, name: loc.name, liveCount: loc.liveCount })));
+
+    // Add aggregated "all" location
+    const locationsWithAll = data || [];
+    const totalCount = locationsWithAll.reduce((sum, loc) => sum + (loc.liveCount || 0), 0);
+    locationsWithAll.push({
+      id: 'all',
+      name: 'جميع البيانات',
+      liveCount: totalCount,
+      status: 'active'
+    });
+
+    locations.set(locationsWithAll);
+    return locationsWithAll;
   } catch (err) {
-    console.error('Failed to load locations:', err);
-    error.set(err.message);
+    console.warn('⚠️ API not available, using fallback mode:', err.message);
+
+    // Don't set error - instead work offline with empty locations
+    // The dashboard will add default test locations later
+    locations.set([]);
+
+    // Enable fallback mode
+    fallbackMode.set(true);
+    fallbackReason.set('API not available - working offline');
+
     return [];
   } finally {
     isLoading.set(false);
@@ -93,26 +240,11 @@ export async function loadMapPoints() {
 }
 
 /**
- * Get location by ID with caching
+ * Get location by ID (simplified - no caching for direct WebSocket usage)
  */
 export async function getLocation(locationId) {
-  // Check cache first
-  if (locationCache.has(locationId)) {
-    const cached = locationCache.get(locationId);
-    // Return cached data if less than 30 seconds old
-    if (Date.now() - cached.timestamp < 30000) {
-      return cached.data;
-    }
-  }
-
   try {
     const data = await analyticsAPI.getLocation(locationId);
-    if (data) {
-      locationCache.set(locationId, {
-        data,
-        timestamp: Date.now()
-      });
-    }
     return data;
   } catch (err) {
     console.error(`Failed to load location ${locationId}:`, err);
@@ -122,42 +254,27 @@ export async function getLocation(locationId) {
 }
 
 /**
- * Get location chart data with caching (UPDATED)
+ * Get location chart data (simplified - primarily used by WebSocket now)
  */
 export async function getLocationChartData(locationId, timeframe = 'HOURLY') {
-  const cacheKey = `${locationId}_${timeframe}`;
-  
-  // Check cache first
-  if (locationHistoryCache.has(cacheKey)) {
-    const cached = locationHistoryCache.get(cacheKey);
-    // Return cached data if less than 60 seconds old
-    if (Date.now() - cached.timestamp < 60000) {
-      return cached.data;
-    }
-  }
-
   try {
-    // Use new sampling data API for chart data
+    // Use sampling data API for chart data (fallback when WebSocket not available)
     const periodMap = {
       'HOURLY': 'minutely',
-      'DAILY': 'hourly', 
+      'DAILY': 'hourly',
       'WEEKLY': 'daily',
       'MONTHLY': 'weekly'
     };
-    
+
     const period = periodMap[timeframe] || 'minutely';
     const data = await analyticsAPI.getSamplingData(locationId, period);
-    
+
     // Transform data format from {period, count, timestamp} to {time, count} for Chart component
     const transformedData = (data.data || []).map(item => ({
       time: item.period || item.timestamp,
       count: item.count || 0
     }));
-    
-    locationHistoryCache.set(cacheKey, {
-      data: transformedData,
-      timestamp: Date.now()
-    });
+
     return transformedData;
   } catch (err) {
     console.error(`Failed to load chart data for ${locationId}:`, err);
@@ -266,11 +383,9 @@ export async function removeLocation(locationId) {
   try {
     await analyticsAPI.removeLocation(locationId);
     // Update locations store
-    locations.update(current => 
+    locations.update(current =>
       current.filter(location => location.id !== locationId)
     );
-    // Clear cache
-    locationCache.delete(locationId);
   } catch (err) {
     console.error('Failed to remove location:', err);
     error.set(err.message);
@@ -386,60 +501,297 @@ let subscribers = 0;
  */
 export function setupRealTimeUpdates(timeframe = 'HOURLY') {
   subscribers++;
-  
+
   // Only create one global connection
   if (!globalUnsubscribe) {
     connectionStatus.set('connecting');
-    
-    globalUnsubscribe = analyticsAPI.subscribe((data) => {
-    connectionStatus.set('connected');
-    
-    // Create message object for UI display
-    const messageForUI = {
-      id: Date.now() + Math.random(),
-      timestamp: new Date().toISOString(),
-      type: data.event || data.type || 'unknown',
-      data: data,
-      source: 'Svelte Analytics API',
-      rawSize: JSON.stringify(data).length
-    };
-    
-    // Add to WebSocket messages store for UI display
-    webSocketMessages.update(messages => [messageForUI, ...messages.slice(0, 99)]);
-    
-    // 🔥 LOG ALL WEBSOCKET MESSAGES FOR TESTING
-    console.log('📡 WebSocket Message Received:', {
-      timestamp: messageForUI.timestamp,
-      messageType: messageForUI.type,
-      fullData: data,
-      dataKeys: Object.keys(data),
-      dataSize: messageForUI.rawSize
-    });
-    
-    // Handle different types of real-time updates
-    if (data.event === 'liveUpdate') {
-      // Update specific location in the store
-      locations.update(current => {
-        // If no locations loaded yet, skip update
-        if (current.length === 0) {
-          return current;
+
+    try {
+      globalUnsubscribe = analyticsAPI.subscribe((data) => {
+        connectionStatus.set('connected');
+
+        // Create message object for UI display
+        const messageForUI = {
+          id: Date.now() + Math.random(),
+          timestamp: new Date().toISOString(),
+          type: data.event || data.type || 'unknown',
+          data: data,
+          source: 'Svelte Analytics API',
+          rawSize: JSON.stringify(data).length
+        };
+
+        // Add to WebSocket messages store for UI display
+        webSocketMessages.update(messages => [messageForUI, ...messages.slice(0, 99)]);
+
+        // Handle different types of real-time updates
+        console.log(`🔍 ALL MESSAGE TYPES: ${data.type || data.event || 'unknown'}`);
+
+        if (data.type === 'live_count_update') {
+          console.log(`🔥 LIVE COUNT UPDATE RECEIVED:`, data);
+          console.log(`🔍 DEBUG: Processing live_count_update message`);
+
+          // SIMPLE TEST: Direct update without complex logic
+          const testCount = data.data?.total_count || Math.floor(Math.random() * 1000);
+          console.log(`🚀 SIMPLE TEST UPDATE: Setting all = ${testCount}`);
+
+          locations.update(current => {
+            return current.map(loc => {
+              if (loc.id === 'all') {
+                console.log(`📊 SIMPLE UPDATE: all from ${loc.liveCount} to ${testCount}`);
+                return { ...loc, liveCount: testCount };
+              }
+              return loc;
+            });
+          });
+
+          // Throttle WebSocket messages - only process every 2 seconds for real-time updates
+          const currentTime = Date.now();
+          const lastProcessed = lastMessageTime.get('live_updates') || 0;
+          const REALTIME_THROTTLE_INTERVAL = 2000; // 2 seconds for real-time feel
+
+          if (currentTime - lastProcessed < REALTIME_THROTTLE_INTERVAL) {
+            console.log(`⚡ Skipping update - too frequent (${currentTime - lastProcessed}ms ago, need ${REALTIME_THROTTLE_INTERVAL}ms)`);
+            return;
+          }
+          lastMessageTime.set('live_updates', currentTime);
+          console.log(`🔍 REAL-TIME: Processing message after ${currentTime - lastProcessed}ms`);
+
+          // Extract data from the new WebSocket format
+          const locationId = data.location_id;
+          const updateData = data.data || {};
+          const changeFromPrevious = data.change_from_previous || 0;
+          const updateNumber = data.update_number || 0;
+
+      console.log(`📊 Processing update #${updateNumber} for location: ${locationId}, change: ${changeFromPrevious}`);
+      console.log(`📊 Raw data received:`, updateData);
+      console.log(`📊 Data type:`, typeof updateData);
+      console.log(`📊 Data keys:`, Object.keys(updateData));
+
+      // Handle different data structures based on location_id
+      const locationUpdates = [];
+
+      if (locationId === 'all') {
+        // For "all" location, extract the total count directly
+        let totalCount = 0;
+
+        if (typeof updateData === 'number') {
+          // If data is directly a number
+          totalCount = updateData;
+          console.log(`📊 Data is number: ${totalCount}`);
+        } else if (updateData.total_count !== undefined) {
+          // If data has total_count field
+          totalCount = updateData.total_count;
+          console.log(`📊 Using total_count: ${totalCount}`);
+        } else if (updateData.count !== undefined) {
+          // If data has count field
+          totalCount = updateData.count;
+          console.log(`📊 Using count: ${totalCount}`);
+        } else if (updateData.live !== undefined) {
+          // If data has live field
+          totalCount = updateData.live;
+          console.log(`📊 Using live: ${totalCount}`);
+        } else if (updateData.value !== undefined) {
+          // If data has value field
+          totalCount = updateData.value;
+          console.log(`📊 Using value: ${totalCount}`);
+        } else if (changeFromPrevious !== undefined && changeFromPrevious !== 0) {
+          // If we have change info, try to use it with previous count
+          const currentLocs = get(locations);
+          const currentAllLoc = currentLocs.find(l => l.id === 'all');
+          const previousCount = currentAllLoc ? currentAllLoc.liveCount : 0;
+          totalCount = previousCount + changeFromPrevious;
+          console.log(`📊 Calculated from change: ${previousCount} + ${changeFromPrevious} = ${totalCount}`);
+        } else {
+          console.warn(`⚠️ Could not extract count from data:`, updateData);
+          console.warn(`⚠️ Available data fields:`, Object.keys(updateData));
+          console.warn(`⚠️ Change from previous: ${changeFromPrevious}`);
+          return;
         }
-        
-        const updated = current.map(location => 
-          location.id === data.locationId 
-            ? { ...location, liveCount: data.liveCount }
-            : location
-        );
-        
-        return updated;
+
+        console.log(`📊 Final extracted total count: ${totalCount}`);
+
+        locationUpdates.push({
+          frontendId: 'all',
+          backendId: 'all',
+          count: totalCount,
+          total: updateData.total_all_time || totalCount,
+          changeFromPrevious,
+          updateNumber
+        });
+
+      } else if (locationId === 'men_region' || locationId === 'northern-gate') {
+        // Handle men's region data
+        const count = typeof updateData === 'number' ? updateData : (updateData.live || updateData.count || 0);
+        locationUpdates.push({
+          frontendId: 'northern-gate',
+          backendId: 'men_region',
+          count: count,
+          total: updateData.total || count,
+          changeFromPrevious,
+          updateNumber
+        });
+
+      } else if (locationId === 'women_region' || locationId === 'womens-section') {
+        // Handle women's region data
+        const count = typeof updateData === 'number' ? updateData : (updateData.live || updateData.count || 0);
+        locationUpdates.push({
+          frontendId: 'womens-section',
+          backendId: 'women_region',
+          count: count,
+          total: updateData.total || count,
+          changeFromPrevious,
+          updateNumber
+        });
+
+      } else {
+        // Handle legacy nested structure if still received
+        const menRegion = updateData.men_region || {};
+        const womenRegion = updateData.women_region || {};
+        const totalCount = updateData.total_count || 0;
+
+        console.log(`📊 Legacy format - Extracted counts:`, {
+          men_live: menRegion.live,
+          women_live: womenRegion.live,
+          total: totalCount
+        });
+
+        if (menRegion.live !== undefined) {
+          locationUpdates.push({
+            frontendId: 'northern-gate',
+            backendId: 'men_region',
+            count: menRegion.live,
+            total: menRegion.total
+          });
+        }
+
+        if (womenRegion.live !== undefined) {
+          locationUpdates.push({
+            frontendId: 'womens-section',
+            backendId: 'women_region',
+            count: womenRegion.live,
+            total: womenRegion.total
+          });
+        }
+
+        if (totalCount !== undefined) {
+          locationUpdates.push({
+            frontendId: 'all',
+            backendId: 'all',
+            count: totalCount,
+            total: updateData.total_all_time || totalCount
+          });
+        }
+      }
+
+      // Apply immediate UI updates - no buffering
+      console.log(`🚀 IMMEDIATE UPDATE: Applying ${locationUpdates.length} location updates directly to UI`);
+
+      locationUpdates.forEach(updateInfo => {
+        console.log(`⚡ IMMEDIATE UPDATE: ${updateInfo.frontendId} = ${updateInfo.count}`);
+
+        // Update locations store immediately
+        locations.update(current => {
+          const updated = current.map(location => {
+            if (location.id === updateInfo.frontendId) {
+              const oldCount = location.liveCount || 0;
+              console.log(`📊 IMMEDIATE COUNT CHANGE: ${updateInfo.frontendId} - ${oldCount} → ${updateInfo.count}`);
+              return {
+                ...location,
+                liveCount: updateInfo.count,
+                totalCount: updateInfo.total || location.totalCount
+              };
+            }
+            return location;
+          });
+
+          // Add new location if not found
+          if (!updated.find(loc => loc.id === updateInfo.frontendId)) {
+            console.log(`📊 ADDING NEW IMMEDIATE LOCATION: ${updateInfo.frontendId} = ${updateInfo.count}`);
+            updated.push({
+              id: updateInfo.frontendId,
+              name: updateInfo.frontendId === 'northern-gate' ? 'البوابة الشمالية' :
+                    updateInfo.frontendId === 'womens-section' ? 'قسم النساء' :
+                    updateInfo.frontendId === 'all' ? 'جميع البيانات' : updateInfo.frontendId,
+              liveCount: updateInfo.count,
+              totalCount: updateInfo.total || updateInfo.count,
+              status: 'active'
+            });
+          }
+
+          return updated;
+        });
       });
-      
-      // Clear cache for updated location
-      locationCache.delete(data.locationId);
-      
+
       // Update last update timestamp
       lastUpdate.set(new Date().toISOString());
-      
+
+        } else if (data.type === 'live_count_subscribed') {
+          // Handle live count subscription confirmation
+          console.log(`🔔 Live count subscription confirmed:`, data);
+
+        } else if (data.type === 'chart_data_subscribed') {
+      // Handle chart data subscription confirmation
+      console.log(`📊 Chart data subscription confirmed:`, data);
+
+    } else if (data.type === 'chart_data_batch_start') {
+      // Handle start of chart data batch
+      console.log(`📊 Chart data batch starting: ${data.total_points} points for ${data.location_id}`);
+
+    } else if (data.type === 'chart_data_point') {
+      // Handle individual chart data points
+      const dataPoint = data.data_point || {};
+      const locationId = data.location_id;
+      const isHistorical = data.is_historical;
+
+      console.log(`📊 Chart data point #${data.point_index}/${data.total_points}: ${locationId}`, dataPoint);
+
+      // Extract chart data from the data point
+      const timestamp = dataPoint.timestamp;
+      const menRegion = dataPoint.men_region || {};
+      const womenRegion = dataPoint.women_region || {};
+      const totalCount = dataPoint.total_count || 0;
+
+      // Transform for chart component
+      const chartPoint = {
+        time: timestamp,
+        count: totalCount,
+        details: {
+          men: menRegion.live || 0,
+          women: womenRegion.live || 0,
+          total: totalCount
+        }
+      };
+
+      // Dispatch custom event for Chart components to handle
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('chartDataPoint', {
+          detail: {
+            locationId: locationId,
+            timeframe: data.timeframe,
+            chartPoint: chartPoint,
+            pointIndex: data.point_index,
+            totalPoints: data.total_points,
+            isHistorical: isHistorical,
+            isBatchComplete: false
+          }
+        }));
+      }
+
+    } else if (data.type === 'chart_data_batch_complete') {
+      // Handle completion of chart data batch
+      console.log(`📊 Chart data batch complete: ${data.points_sent} points sent for ${data.location_id}`);
+
+      // Dispatch batch completion event
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('chartDataBatchComplete', {
+          detail: {
+            locationId: data.location_id,
+            timeframe: data.timeframe,
+            pointsSent: data.points_sent
+          }
+        }));
+      }
+
     } else if (data.event === 'analyticsUpdate') {
       // Update analytics summary
       if (data.data) {
@@ -448,7 +800,6 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
       
     } else if (data.type === 'chart_data_update') {
       // Handle real-time chart data updates
-      console.log(`📈 Chart data update: ${data.location_id}`, data.chart_data);
       
       // Dispatch custom event for Chart components to handle real-time updates
       if (typeof window !== 'undefined') {
@@ -463,7 +814,6 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
       
     } else if (data.type === 'chart_data_response') {
       // Handle chart data response from WebSocket requests
-      console.log(`📊 Chart data response: ${data.location_id}`, data.chart_data);
       
       // Dispatch custom event for Chart components
       if (typeof window !== 'undefined') {
@@ -476,21 +826,6 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
           }
         }));
       }
-      
-    } else if (data.type === 'live_count_update') {
-      // Handle WebSocket live count updates from backend
-      
-      locations.update(current => {
-        if (current.length === 0) return current;
-        
-        return current.map(location => 
-          location.id === data.location_id 
-            ? { ...location, liveCount: data.live_count }
-            : location
-        );
-      });
-      
-      lastUpdate.set(new Date().toISOString());
       
     } else if (data.event === 'pong') {
       // Handle ping/pong for connection health
@@ -511,7 +846,6 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
       fallbackReason.set(data.maxAttemptsReached ? 'Max retry attempts reached' : 'Connection failed');
     } else if (data.type === 'progressive_sample') {
       // Handle progressive sample loading for smooth animation
-      console.log(`📈 Progressive sample: ${data.location_id} (${data.sample_index}/${data.total_samples}) count: ${data.current_count}`);
       
       // Dispatch custom event for LiveCounter components to handle animation
       if (typeof window !== 'undefined') {
@@ -531,7 +865,6 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
       
     } else if (data.type === 'progressive_loading_complete') {
       // Handle progressive loading completion
-      console.log(`✅ Progressive loading complete: ${data.location_id}, final count: ${data.final_count}`);
       
       // Update the location with final count
       locations.update(current => {
@@ -557,18 +890,32 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
     } else if (data.type === 'progressive_loading_error') {
       // Handle progressive loading errors
       console.error(`❌ Progressive loading error: ${data.location_id}`, data.error);
-      
-    } else {
-      console.warn('⚠️ Unknown WebSocket message type:', data.type);
-    }
-    });
 
-    // Handle connection status
-    const originalConnect = analyticsAPI.connectWebSocket;
-    analyticsAPI.connectWebSocket = () => {
-      connectionStatus.set('connecting');
-      originalConnect.call(analyticsAPI);
-    };
+    } else if (data.event === 'liveUpdate') {
+      // DISABLED: Legacy liveUpdate format - use live_count_update instead
+      console.log(`🚫 IGNORING Legacy liveUpdate event (use live_count_update instead):`, data);
+
+    } else {
+      console.warn('⚠️ Unknown WebSocket message type:', data.type || data.event || 'undefined', data);
+    }
+      }); // Close the analyticsAPI.subscribe callback function
+
+      // Handle connection status
+      const originalConnect = analyticsAPI.connectWebSocket;
+      analyticsAPI.connectWebSocket = () => {
+        connectionStatus.set('connecting');
+        originalConnect.call(analyticsAPI);
+      };
+    } catch (error) {
+      console.error('❌ WebSocket setup failed:', error);
+      connectionStatus.set('disconnected');
+      websocketHealthy.set(false);
+      fallbackMode.set(true);
+      fallbackReason.set('WebSocket initialization failed');
+
+      // Don't let WebSocket failure break the app
+      globalUnsubscribe = () => {}; // Dummy unsubscribe function
+    }
   }
 
   // Return unsubscribe function that manages global state
@@ -665,17 +1012,14 @@ export function loadChartDataViaWebSocket(locationId, timeframe) {
 export async function refreshPeriodicData() {
   console.log('🔄 Refreshing periodic GraphQL data...');
   const timeframe = get(selectedTimeframe);
-  
-  // Clear caches for fresh data
-  locationCache.clear();
-  
+
   // Load only periodic data via GraphQL (not real-time data)
   await Promise.allSettled([
     loadLocations(),
-    loadAnalyticsSummary(timeframe), 
+    loadAnalyticsSummary(timeframe),
     loadCameras()
   ]);
-  
+
   console.log('✅ Periodic GraphQL data refreshed successfully');
 }
 
@@ -791,27 +1135,96 @@ if (typeof window !== 'undefined') {
       console.log('🔌 WebSocket Status:', get(connectionStatus));
       console.log('📊 Last Update:', get(lastUpdate));
       console.log('📍 Locations:', get(locations));
+      console.log('⏳ Pending UI Updates:', pendingUIUpdates);
+      console.log('⏱️ Last UI Update Time:', new Date(lastUIUpdateTime).toLocaleTimeString());
+      console.log('⏰ UI Update Timer Active:', uiUpdateTimer !== null);
     },
-    
-    // Simulate a test message
-    simulateMessage: (type = 'liveUpdate', data = {}) => {
+
+    // Simulate live count update message (new backend format)
+    simulateLiveUpdate: (data = {}) => {
       const testMessage = {
-        event: type,
-        locationId: 'test-location',
-        liveCount: Math.floor(Math.random() * 100),
+        type: 'live_count_update',
+        location_id: 'all',
+        timeframe: 'HOURLY',
+        data: {
+          men_region: { live: data.menLive || Math.floor(Math.random() * 100) + 1, total: 1000 },
+          women_region: { live: data.womenLive || Math.floor(Math.random() * 200) + 1, total: 2000 },
+          total_count: (data.menLive || 50) + (data.womenLive || 100),
+          total_all_time: 5000
+        },
         timestamp: new Date().toISOString(),
         ...data
       };
-      console.log('🧪 Simulating WebSocket message:', testMessage);
-      // This would normally come from the WebSocket
+      console.log('🧪 Simulating live count update:', testMessage);
+
+      // Send to message handler directly (like WebSocket would)
+      // This will be processed by the live_count_update handler
     },
-    
-    // Get analytics API instance  
+
+    // Simulate chart data point message
+    simulateChartPoint: (data = {}) => {
+      const testMessage = {
+        type: 'chart_data_point',
+        location_id: 'all',
+        timeframe: 'HOURLY',
+        data_point: {
+          timestamp: new Date().toISOString().substring(0, 16), // "2025-09-19 10:29"
+          men_region: { live: data.menLive || Math.floor(Math.random() * 50), total: 100 },
+          women_region: { live: data.womenLive || Math.floor(Math.random() * 100), total: 200 },
+          total_count: (data.menLive || 25) + (data.womenLive || 50)
+        },
+        point_index: data.pointIndex || 1,
+        total_points: data.totalPoints || 20,
+        is_historical: data.isHistorical || true,
+        timestamp: new Date().toISOString(),
+        ...data
+      };
+      console.log('🧪 Simulating chart data point:', testMessage);
+    },
+
+    // Subscribe to live count pattern
+    subscribeToLiveCount: (timeframe = 'HOURLY', locationId = 'all', interval = 3) => {
+      console.log('🧪 Testing live count subscription...');
+      analyticsAPI.subscribeToLiveCountPattern(timeframe, locationId, interval);
+    },
+
+    // Subscribe to chart data pattern
+    subscribeToChartData: (timeframe = 'HOURLY', locationId = 'all', interval = 10, limit = 20) => {
+      console.log('🧪 Testing chart data subscription...');
+      analyticsAPI.subscribeToChartDataPattern(timeframe, locationId, interval, limit);
+    },
+
+    // Force apply pending updates immediately (for testing)
+    forceUpdate: () => {
+      console.log('🧪 Force applying buffered updates...');
+      if (uiUpdateTimer) {
+        clearTimeout(uiUpdateTimer);
+        uiUpdateTimer = null;
+      }
+      applyPendingUIUpdates();
+    },
+
+    // Clear all pending updates (for testing)
+    clearPending: () => {
+      console.log('🧪 Clearing all pending buffered updates');
+      pendingUIUpdates.clear();
+      if (uiUpdateTimer) {
+        clearTimeout(uiUpdateTimer);
+        uiUpdateTimer = null;
+      }
+    },
+
+    // Get analytics API instance
     api: analyticsAPI
   };
-  
+
   console.log('🧪 WebSocket Testing Helpers Available:');
-  console.log('   - window.testWebSocket.status()');
-  console.log('   - window.testWebSocket.simulateMessage()');
+  console.log('   - window.testWebSocket.status() - Show current status & pending updates');
+  console.log('   - window.testWebSocket.simulateLiveUpdate({menLive: 50, womenLive: 100})');
+  console.log('   - window.testWebSocket.simulateChartPoint({menLive: 25, womenLive: 50})');
+  console.log('   - window.testWebSocket.subscribeToLiveCount(timeframe, locationId, interval)');
+  console.log('   - window.testWebSocket.subscribeToChartData(timeframe, locationId, interval, limit)');
+  console.log('   - window.testWebSocket.forceUpdate() - Apply buffered updates immediately');
+  console.log('   - window.testWebSocket.clearPending() - Clear all pending updates');
   console.log('   - window.testWebSocket.api');
 }

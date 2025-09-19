@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
+    <title>WebSocket Test - اختبار الاتصال</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; direction: rtl; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .disconnected { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .message { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 5px 0; border-radius: 3px; font-family: monospace; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        textarea { width: 100%; height: 300px; font-family: monospace; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 WebSocket Connection Test</h1>
+
+        <div class="section">
+            <h2>📡 Connection Status</h2>
+            <div id="status" class="status disconnected">غير متصل</div>
+            <button onclick="connect()">اتصال</button>
+            <button onclick="disconnect()">قطع الاتصال</button>
+            <button onclick="clearMessages()">مسح الرسائل</button>
+        </div>
+
+        <div class="section">
+            <h2>📤 Send Test Messages</h2>
+            <button onclick="subscribeAll()">Subscribe to ALL locations</button>
+            <button onclick="subscribeWomen()">Subscribe to Women Region</button>
+            <button onclick="subscribeMen()">Subscribe to Men Region</button>
+            <button onclick="testPing()">Test Ping</button>
+        </div>
+
+        <div class="section">
+            <h2>📨 Messages Log</h2>
+            <textarea id="messages" readonly></textarea>
+        </div>
+
+        <div class="section">
+            <h2>🔧 Configuration</h2>
+            <p><strong>WebSocket URL:</strong> <span id="wsUrl"></span></p>
+            <p><strong>Environment:</strong></p>
+            <ul>
+                <li>VITE_API_URL: <span id="apiUrl"></span></li>
+                <li>VITE_WEBSOCKET_URL: <span id="wsEnvUrl"></span></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        const WEBSOCKET_URL = 'ws://10.10.1.205:8080/ws/analytics';
+
+        // Display configuration
+        document.getElementById('wsUrl').textContent = WEBSOCKET_URL;
+        document.getElementById('apiUrl').textContent = 'Not available in static context';
+        document.getElementById('wsEnvUrl').textContent = 'Not available in static context';
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString('ar-SA');
+            const logMessage = `[${timestamp}] ${message}\n`;
+            const textarea = document.getElementById('messages');
+            textarea.value += logMessage;
+            textarea.scrollTop = textarea.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.textContent = '✅ متصل';
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = '❌ غير متصل';
+            }
+        }
+
+        function connect() {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                log('⚠️ Already connected');
+                return;
+            }
+
+            log('🔌 Attempting connection to: ' + WEBSOCKET_URL);
+            socket = new WebSocket(WEBSOCKET_URL);
+
+            socket.onopen = function(event) {
+                log('✅ WebSocket connected successfully');
+                updateStatus(true);
+            };
+
+            socket.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log('📨 Message received: ' + JSON.stringify(data, null, 2));
+                } catch (error) {
+                    log('📨 Raw message: ' + event.data);
+                }
+            };
+
+            socket.onclose = function(event) {
+                log(`🔌 Connection closed: ${event.code} - ${event.reason}`);
+                updateStatus(false);
+            };
+
+            socket.onerror = function(error) {
+                log('❌ WebSocket error: ' + error);
+                updateStatus(false);
+            };
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.close();
+                socket = null;
+                log('🔌 Disconnected manually');
+                updateStatus(false);
+            }
+        }
+
+        function sendMessage(message) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify(message));
+                log('📤 Sent: ' + JSON.stringify(message, null, 2));
+            } else {
+                log('❌ Cannot send - not connected');
+            }
+        }
+
+        function subscribeAll() {
+            sendMessage({
+                action: 'subscribe_pattern',
+                pattern: 'live_count',
+                locationId: 'all',
+                interval: 3,
+                timeframe: 'HOURLY'
+            });
+        }
+
+        function subscribeWomen() {
+            sendMessage({
+                action: 'subscribe_pattern',
+                pattern: 'live_count',
+                locationId: 'women_region',
+                interval: 3,
+                timeframe: 'HOURLY'
+            });
+        }
+
+        function subscribeMen() {
+            sendMessage({
+                action: 'subscribe_pattern',
+                pattern: 'live_count',
+                locationId: 'men_region',
+                interval: 3,
+                timeframe: 'HOURLY'
+            });
+        }
+
+        function testPing() {
+            sendMessage({
+                action: 'ping',
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').value = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🔍 WebSocket Test Page Loaded');
+            connect();
+        };
+    </script>
+</body>
+</html>

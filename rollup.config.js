@@ -45,8 +45,12 @@ export default {
 		sourcemap: true,
 		format: 'iife',
 		name: 'app',
-		file: 'public/build/bundle.js'
+		file: 'public/build/bundle.js',
+		globals: {
+			'date-fns': 'dateFns'
+		}
 	},
+	external: [],
 	plugins: [
 		svelte({
 			compilerOptions: {
@@ -61,6 +65,8 @@ export default {
 		}),
 		replace({
 			'process.env.MAP_URL': JSON.stringify(process.env.VITE_MAP_URL),
+			'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL),
+			'import.meta.env.VITE_WEBSOCKET_URL': JSON.stringify(process.env.VITE_WEBSOCKET_URL),
 			preventAssignment: true
 		}),
 		// we'll extract any component CSS out into
@@ -75,7 +81,8 @@ export default {
 		resolve({
 			browser: true,
 			dedupe: ['svelte'],
-			exportConditions: ['svelte']
+			exportConditions: ['svelte'],
+			preferBuiltins: false
 		}),
 		commonjs(),
 

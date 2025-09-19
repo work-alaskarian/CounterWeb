@@ -1,0 +1,217 @@
+.loading-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .loading-default {
+    width: 100%;
+    min-height: 200px;
+  }
+  
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9998;
+  }
+  
+  .loading-inline {
+    display: inline-flex;
+    min-height: auto;
+  }
+  
+  .loading-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+  }
+  
+  .loading-content {
+    position: relative;
+    text-align: center;
+    z-index: 1;
+  }
+  
+  .spinner {
+    position: relative;
+    display: inline-block;
+  }
+  
+  .loading-small .spinner {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .loading-medium .spinner {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .loading-large .spinner {
+    width: 64px;
+    height: 64px;
+  }
+  
+  .spinner-ring {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 2px solid transparent;
+    border-top: 2px solid #16a085;
+    border-radius: 50%;
+    animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  }
+  
+  .spinner-ring:nth-child(1) {
+    animation-delay: -0.45s;
+  }
+  
+  .spinner-ring:nth-child(2) {
+    animation-delay: -0.3s;
+  }
+  
+  .spinner-ring:nth-child(3) {
+    animation-delay: -0.15s;
+  }
+  
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+  
+  .loading-message {
+    margin-top: 1rem;
+    margin-bottom: 0;
+    color: #2c3e50;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  
+  .loading-small .loading-message {
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+  }
+  
+  .loading-large .loading-message {
+    font-size: 1.1rem;
+    margin-top: 1.5rem;
+  }
+  
+  .loading-overlay .loading-message {
+    color: white;
+  }
+  
+  /* Timeout styles */
+  .timeout-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .timeout-content {
+    position: relative;
+    text-align: center;
+    z-index: 1;
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    max-width: 300px;
+  }
+  
+  .timeout-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 1rem;
+    color: #e67e22;
+  }
+  
+  .timeout-icon svg {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .timeout-message {
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+  }
+  
+  .timeout-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: #16a085;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .timeout-retry:hover {
+    background: #148f76;
+    transform: translateY(-1px);
+  }
+  
+  .timeout-retry svg {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .loading-inline .timeout-content {
+    padding: 1rem;
+    min-width: 200px;
+  }
+  
+  .loading-small .timeout-content {
+    padding: 1rem;
+    max-width: 250px;
+  }
+  
+  .loading-small .timeout-icon {
+    width: 32px;
+    height: 32px;
+  }
+  
+  /* Accessibility improvements */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner-ring {
+      animation: none;
+    }
+    
+    .spinner::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 4px;
+      height: 4px;
+      background: #16a085;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .timeout-content {
+      margin: 1rem;
+      padding: 1.5rem;
+    }
+  }

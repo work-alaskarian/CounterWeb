@@ -1,0 +1,8 @@
+.map-container {
+    height: 50vh;
+    width: 80vh;
+    margin: 0 auto;
+    border: 3px solid #16a085;
+    border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(22, 160, 133, 0.15);
+  }
