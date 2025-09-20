@@ -51,21 +51,13 @@ const WEBSOCKET_THROTTLE_INTERVAL = 10000; // 10 seconds - throttle WebSocket me
  * Apply pending UI updates with smart buffering
  */
 function applyPendingUIUpdates() {
-  console.log(`🎯 APPLYING BUFFERED UI UPDATES: ${pendingUIUpdates.size} pending`);
-  console.log(`📺 DISPLAY UPDATE START: Updating live counters after 10-second buffer`);
+  console.debug(`📊 Applying ${pendingUIUpdates.size} buffered updates`);
 
   if (pendingUIUpdates.size === 0) {
-    console.log(`⚠️ NO PENDING UI UPDATES TO APPLY`);
     return;
   }
 
-  // Get current locations
   const currentLocations = get(locations);
-  console.log(`📍 CURRENT LOCATIONS (${currentLocations.length}):`,
-    currentLocations.map(loc => `${loc.id}:${loc.liveCount}`).join(', '));
-
-  console.log(`⏳ PENDING UI UPDATES:`,
-    Array.from(pendingUIUpdates.entries()).map(([id, data]) => `${id}:${data.count}`).join(', '));
 
   // Apply all pending updates at once
   locations.update(current => {
@@ -79,10 +71,7 @@ function applyPendingUIUpdates() {
       if (pendingUpdate) {
         const oldCount = location.liveCount || 0;
         const newCount = pendingUpdate.count;
-        console.log(`📊 BUFFERED UPDATE: ${location.id} - ${oldCount} → ${newCount}`);
-        if (oldCount !== newCount) {
-          console.log(`🚀 BUFFERED COUNT CHANGED: ${location.id} will trigger UI update`);
-        }
+        console.debug(`📊 ${location.id}: ${oldCount} → ${newCount}`);
         return {
           ...location,
           liveCount: newCount,
@@ -95,7 +84,7 @@ function applyPendingUIUpdates() {
     // Add any missing locations from the updates
     Array.from(pendingUIUpdates.entries()).forEach(([locationId, updateData]) => {
       if (!updated.find(loc => loc.id === locationId)) {
-        console.log(`📊 ADDING NEW BUFFERED LOCATION: ${locationId} = ${updateData.count}`);
+        console.debug(`📊 Adding location ${locationId}: ${updateData.count}`);
         updated.push({
           id: locationId,
           name: locationId === 'northern-gate' ? 'البوابة الشمالية' :
@@ -108,18 +97,13 @@ function applyPendingUIUpdates() {
       }
     });
 
-    console.log(`📊 FINAL BUFFERED LOCATIONS (${updated.length}):`,
-      updated.map(loc => `${loc.id}:${loc.liveCount}`).join(', '));
-
     return updated;
   });
 
   // Clear pending updates and update timestamps
   pendingUIUpdates.clear();
   lastUIUpdateTime = Date.now();
-  console.log(`✅ BUFFERED UI UPDATES APPLIED AND CLEARED`);
-  console.log(`📺 DISPLAY UPDATE COMPLETE: Live counters now showing new values on screen`);
-  console.log(`🎉 10-SECOND BUFFER CYCLE FINISHED: UI successfully updated after waiting period`);
+  console.info(`✅ Applied ${pendingUIUpdates.size} buffered updates`);
 }
 
 /**
@@ -128,9 +112,6 @@ function applyPendingUIUpdates() {
 function scheduleBufferedUIUpdate(locationId, count, data) {
   const currentTime = Date.now();
   const timeSinceLastUpdate = currentTime - lastUIUpdateTime;
-
-  console.log(`⏰ SCHEDULING BUFFERED UPDATE: ${locationId} = ${count}`);
-  console.log(`⏱️ Time since last UI update: ${timeSinceLastUpdate}ms`);
 
   // Store the update
   pendingUIUpdates.set(locationId, {
@@ -141,7 +122,7 @@ function scheduleBufferedUIUpdate(locationId, count, data) {
 
   // If it's been more than IMMEDIATE_UPDATE_THRESHOLD since last update, apply immediately
   if (timeSinceLastUpdate > IMMEDIATE_UPDATE_THRESHOLD) {
-    console.log(`🚀 IMMEDIATE UPDATE: Long time since last update (${timeSinceLastUpdate}ms > ${IMMEDIATE_UPDATE_THRESHOLD}ms)`);
+    console.debug(`🚀 Immediate update: ${timeSinceLastUpdate}ms > ${IMMEDIATE_UPDATE_THRESHOLD}ms`);
     applyPendingUIUpdates();
     return;
   }

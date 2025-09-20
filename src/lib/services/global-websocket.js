@@ -119,36 +119,25 @@ class GlobalWebSocketService {
   handleMessage(data) {
     // ONLY process live_count_update messages
     if (data.type === 'live_count_update' && data.location_id === 'all') {
-      console.log('🌐 🎯 Processing live_count_update for location_id=all');
-      console.log('🌐 📊 Message timeframe:', data.timeframe, 'Current timeframe:', this.currentTimeframe);
 
       // IMPORTANT: Only process if timeframe matches current selection
       if (data.timeframe !== this.currentTimeframe) {
-        console.log(`🌐 🚫 IGNORING message - timeframe mismatch: got ${data.timeframe}, want ${this.currentTimeframe}`);
+        console.debug(`🌐 Ignoring ${data.timeframe} (want ${this.currentTimeframe})`);
         return;
       }
 
-      console.log('🌐 ✅ Timeframe matches, processing data');
-      console.log('🌐 📊 Full data received:', data.data);
-      console.log('🌐 🕐 Server timestamp:', data.data?.timestamp);
-      console.log('🌐 📈 IMPORTANT COUNTS:');
-      console.log('  🔢 Current hour total_count:', data.data?.total_count);
-      console.log('  📊 All-time total_all_time:', data.data?.total_all_time);
-      console.log('  👨 Men region live:', data.data?.men_region?.live);
-      console.log('  👨 Men region total:', data.data?.men_region?.total);
-      console.log('  👩 Women region live:', data.data?.women_region?.live);
-      console.log('  👩 Women region total:', data.data?.women_region?.total);
+      // Log important counts
+      console.log('📊 Live counts:', {
+        total: data.data?.total_count,
+        men: data.data?.men_region?.live,
+        women: data.data?.women_region?.live,
+        timeframe: data.timeframe
+      });
 
       // Extract different counts for different locations
       const menRegionLive = data.data?.men_region?.live;
       const womenRegionLive = data.data?.women_region?.live;
       const totalCount = data.data?.total_count;
-
-      console.log(`🌐 📊 Extracted counts for ${this.currentTimeframe}:`, {
-        men_region: menRegionLive,
-        women_region: womenRegionLive,
-        total_count: totalCount
-      });
 
       // Notify subscribers with location-specific data
       this.subscribers.forEach((callback, locationId) => {
@@ -158,16 +147,12 @@ class GlobalWebSocketService {
           // Determine which count to send based on location ID
           if (locationId === 'men_region' || locationId === 'northern-gate') {
             countForLocation = menRegionLive;
-            console.log(`🌐 📊 Updating ${locationId} with men_region.live: ${countForLocation}`);
           } else if (locationId === 'women_region' || locationId === 'womens-section') {
             countForLocation = womenRegionLive;
-            console.log(`🌐 📊 Updating ${locationId} with women_region.live: ${countForLocation}`);
           } else if (locationId === 'all') {
             countForLocation = totalCount;
-            console.log(`🌐 📊 Updating ${locationId} with total_count: ${countForLocation}`);
           } else {
             countForLocation = totalCount; // Default fallback
-            console.log(`🌐 📊 Updating ${locationId} with total_count (fallback): ${countForLocation}`);
           }
 
           if (countForLocation !== undefined) {
@@ -181,16 +166,16 @@ class GlobalWebSocketService {
               }
             });
           } else {
-            console.log(`🌐 ⚠️ No count available for ${locationId}`);
+            console.warn(`🌐 No count available for ${locationId}`);
           }
         } catch (error) {
-          console.error(`🌐 Error updating ${locationId}:`, error);
+          console.error(`🌐 Update error for ${locationId}:`, error);
         }
       });
     } else if (data.type === 'live_count_subscribed') {
-      console.log('🌐 🔔 Live count subscription confirmed:', data.message);
+      console.log('🌐 Subscription confirmed');
     } else {
-      console.log(`🌐 🚫 Ignoring message - type: ${data.type}, location_id: ${data.location_id}`);
+      console.debug(`🌐 Ignoring message: ${data.type}`);
     }
   }
 
@@ -198,26 +183,18 @@ class GlobalWebSocketService {
    * Subscribe to live count updates - SIMPLE
    */
   subscribe(locationId, callback) {
-    console.log(`🌐 📝 🚀 SUBSCRIBE called for locationId: ${locationId}`);
-    console.log(`🌐 📊 Current subscribers before add:`, Array.from(this.subscribers.keys()));
-    console.log(`🌐 🔧 Connection status: ${this.isConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
-
     this.subscribers.set(locationId, callback);
-    console.log(`🌐 ✅ Subscriber added. Total subscribers: ${this.subscribers.size}`);
-    console.log(`🌐 📊 All subscribers:`, Array.from(this.subscribers.keys()));
+    console.info(`🌐 Subscribed: ${locationId} (${this.subscribers.size} total)`);
 
     // Connect if not already connected
     if (!this.isConnected) {
-      console.log(`🌐 🔌 Not connected, calling connect()...`);
       this.connect();
-    } else {
-      console.log(`🌐 ✅ Already connected, no need to reconnect`);
     }
 
     // Return unsubscribe function
     return () => {
-      console.log(`🌐 📝 Unsubscribing ${locationId} from live count updates`);
       this.subscribers.delete(locationId);
+      console.info(`🌐 Unsubscribed: ${locationId}`);
     };
   }
 
@@ -242,8 +219,6 @@ class GlobalWebSocketService {
    * Start keep-alive ping to prevent server timeout
    */
   startKeepAlive() {
-    console.log('🌐 💓 Starting keep-alive ping every 30 seconds');
-
     // Clear any existing keep-alive
     if (this.keepAliveInterval) {
       clearInterval(this.keepAliveInterval);
@@ -251,10 +226,8 @@ class GlobalWebSocketService {
 
     this.keepAliveInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        console.log('🌐 💓 Sending keep-alive ping...');
         this.ws.send(JSON.stringify({ action: "ping" }));
       } else {
-        console.log('🌐 💓 WebSocket not open, stopping keep-alive');
         clearInterval(this.keepAliveInterval);
       }
     }, 30000);
@@ -264,34 +237,23 @@ class GlobalWebSocketService {
    * Send subscription message with current timeframe
    */
   sendSubscription() {
-    console.log('🌐 📤 sendSubscription() called');
-    console.log('🌐 📊 WebSocket state:', this.ws ? this.ws.readyState : 'null');
-    console.log('🌐 📊 WebSocket.OPEN constant:', WebSocket.OPEN);
-
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const subscribeMessage = {
         action: "subscribe_pattern",
         pattern: "live_count",
         locationId: "all",
-        interval: 5, // Better interval for viewing updates (5 seconds)
+        interval: 5,
         timeframe: this.currentTimeframe
       };
 
-      console.log('🌐 📤 SENDING SUBSCRIPTION MESSAGE:', subscribeMessage);
-      console.log('🌐 📤 Message as JSON:', JSON.stringify(subscribeMessage));
-
       try {
         this.ws.send(JSON.stringify(subscribeMessage));
-        console.log('🌐 ✅ Subscription message sent successfully!');
-        console.log('🌐 📊 WebSocket state after send:', this.ws.readyState);
+        console.log(`🌐 Subscribed to ${this.currentTimeframe} updates`);
       } catch (error) {
-        console.error('🌐 ❌ Failed to send subscription message:', error);
-        console.error('🌐 📊 WebSocket state when send failed:', this.ws.readyState);
+        console.error('🌐 Subscription failed:', error);
       }
     } else {
-      console.error('🌐 ❌ Cannot send subscription - WebSocket not connected or not ready');
-      console.error('🌐 ❌ WebSocket exists:', !!this.ws);
-      console.error('🌐 ❌ WebSocket readyState:', this.ws ? this.ws.readyState : 'WebSocket is null');
+      console.error('🌐 Cannot send subscription - WebSocket not ready');
     }
   }
 

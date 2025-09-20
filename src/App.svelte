@@ -1,16 +1,10 @@
 <script>
-	console.log('🔍 APP: Script starting...');
-
-	// Temporarily disabled problematic components
+	// Components
 	import LiveCounter from './components/LiveCounter.svelte';
 	import LocationsDashboard from './components/LocationsDashboard.svelte';
 	import AnalyticsDashboard from './components/AnalyticsDashboard.svelte';
 	import Map from './components/Map.svelte';
 	import WebSocketLog from './components/WebSocketLog.svelte';
-	// import Footer from './components/Footer.svelte';
-	// import ConnectionBanner from './components/ConnectionBanner.svelte';
-
-	console.log('🔍 APP: All imports loaded');
 	// import CoordinatesDisplay from './components/CoordinatesDisplay.svelte';
 
 	let currentPage = 'live-counter';
@@ -80,7 +74,7 @@
 		const backendTimeframe = timeframeMap[newTimeframe] || 'HOURLY';
 		globalWebSocketService.updateTimeframe(backendTimeframe);
 
-		console.log(`📅 SIMPLE: Timeframe changed to: ${newTimeframe} (${backendTimeframe}) - WebSocket will reconnect`);
+		console.info(`📅 Timeframe changed: ${newTimeframe}`);
 	}
 
 	// Add scroll listener
@@ -92,54 +86,29 @@
 	
 	
 	onMount(async () => {
-		console.log('🔄 CounterWeb App mounting...', {
-			timestamp: new Date().toISOString(),
-			location: window.location.href,
-			userAgent: navigator.userAgent.substring(0, 50) + '...'
-		});
+		console.info('🔄 App mounting...');
 
-		// Check for saved dark mode preference
+		// Check for saved preferences
 		const savedDarkMode = localStorage.getItem('darkMode') === 'true';
 		if (savedDarkMode) {
 			isDarkMode = true;
 			document.documentElement.classList.add('dark-mode');
-			console.log('🌙 Dark mode enabled from localStorage');
+			console.debug('🌙 Dark mode restored');
 		}
 
-		// Check for saved timeframe preference
 		const savedTimeframe = localStorage.getItem('timeframe');
 		if (savedTimeframe && timeframes.includes(savedTimeframe)) {
 			timeframe = savedTimeframe;
-			console.log(`⏰ Timeframe loaded from localStorage: ${timeframe}`);
+			console.debug(`⏰ Timeframe restored: ${timeframe}`);
 		}
 
-		// Only setup global real-time WebSocket connection
-		console.log('🔧 Environment check:', {
-			hasLocalStorage: typeof localStorage !== 'undefined',
-			hasWebSocket: typeof WebSocket !== 'undefined',
-			hasFetch: typeof fetch !== 'undefined',
-			online: navigator.onLine
-		});
-		
 		try {
-			// Load initial locations data first
-			console.log('🔄 SIMPLE: Loading initial locations...');
 			await loadLocations();
-			console.log('✅ SIMPLE: Locations loaded successfully');
-
-			console.log('⏰ SIMPLE: ===== STARTING WEBSOCKET SETUP =====');
-			console.log('⏰ SIMPLE: Main location for LiveCounter:', mainLocation);
-			console.log('⏰ SIMPLE: About to call globalWebSocketService.connect()...');
-
-			// Connect to global WebSocket service
 			globalWebSocketService.connect();
-			console.log('✅ SIMPLE: globalWebSocketService.connect() call completed');
-			console.log('✅ SIMPLE: ===== WEBSOCKET SETUP COMPLETE =====');
-
-			console.log('✅ SIMPLE: CounterWeb app ready! Components will load their own data.');
+			console.info('✅ App initialized');
 		} catch (error) {
-			console.error('❌ SIMPLE: Failed to initialize app:', error);
-			console.log('⚠️ SIMPLE: Components will work with limited functionality');
+			console.error('❌ App initialization failed:', error);
+			console.warn('⚠️ Running with limited functionality');
 		}
 
 		window.addEventListener('scroll', handleScroll);
