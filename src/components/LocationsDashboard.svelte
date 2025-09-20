@@ -14,7 +14,6 @@
   
   export let timeframe = 'Hourly';
   let showAddModal = false;
-  let unsubscribeRealTime = null;
   
   $: ({ showCustomization, gridSize } = $customization);
 
@@ -42,7 +41,7 @@
   
   const availableLocations = [
     { id: 'womens-section', name: 'قسم النساء', initialCount: 0 },
-    { id: 'northern-gate', name: 'البوابة الشمالية', initialCount: 0 },
+    { id: 'northern-gate', name: 'قسم الرجال', initialCount: 0 },
     { id: 'southern-gate', name: 'البوابة الجنوبية', initialCount: 0 },
     { id: 'first-floor-shrine', name: 'الطابق الأول للحرم', initialCount: 0 },
     { id: 'third-floor-shrine', name: 'الطابق الثالث للحرم', initialCount: 0 },
@@ -122,7 +121,7 @@
         // Add test locations that match WebSocket location IDs
         const testLocations = [
           { id: 'womens-section', name: 'قسم النساء', liveCount: 0, initialCount: 0 },
-          { id: 'northern-gate', name: 'البوابة الشمالية', liveCount: 0, initialCount: 0 }
+          { id: 'northern-gate', name: 'قسم الرجال', liveCount: 0, initialCount: 0 }
         ];
 
         for (const loc of testLocations) {
@@ -140,12 +139,7 @@
 
       // Small delay to ensure store is populated
       setTimeout(() => {
-        try {
-          unsubscribeRealTime = setupRealTimeUpdates();
-          console.log('✅ Real-time updates initialized');
-        } catch (error) {
-          console.warn('⚠️ Real-time updates not available:', error.message);
-        }
+        console.log('✅ Real-time updates ready via global WebSocket service');
       }, 100);
     } catch (error) {
       console.error('❌ LocationsDashboard: Initialization failed:', error);
@@ -156,9 +150,7 @@
   });
 
   onDestroy(() => {
-    if (unsubscribeRealTime) {
-      unsubscribeRealTime();
-    }
+    // Cleanup handled by global WebSocket service
   });
   
   function toggleCustomization() {

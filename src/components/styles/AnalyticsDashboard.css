@@ -144,6 +144,24 @@
   .chart-container {
     height: 300px;
     position: relative;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    padding: 8px;
+    margin-top: 12px;
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(22, 160, 133, 0.1);
+  }
+
+  :global(.dark-mode) .chart-container {
+    background: rgba(45, 55, 72, 0.3);
+    border: 1px solid rgba(74, 85, 104, 0.4);
+  }
+
+  .chart-container canvas {
+    border-radius: 8px;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 
   .full-width {
@@ -341,4 +359,408 @@
     border-radius: 50%;
     background-color: #16a085;
     animation: pulse 2s infinite;
+  }
+
+  /* Auto-refresh indicator */
+  .refresh-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(22, 160, 133, 0.95);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 20px rgba(22, 160, 133, 0.3);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Cairo', sans-serif;
+    animation: slideInFromRight 0.3s ease-out;
+  }
+
+  .refresh-icon {
+    animation: spin 1s linear infinite;
+    font-size: 16px;
+  }
+
+  @keyframes slideInFromRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Chart loading states */
+  .chart-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 280px;
+    gap: 20px;
+    color: #7f8c8d;
+    font-family: 'Cairo', sans-serif;
+  }
+
+  :global(.dark-mode) .chart-loading {
+    color: #a0aec0;
+  }
+
+  .loading-animation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .loading-icon {
+    position: relative;
+  }
+
+  .chart-loading-svg {
+    width: 48px;
+    height: 48px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .loading-path {
+    stroke-dasharray: 60;
+    stroke-dashoffset: 60;
+    animation: pathDraw 2s ease-in-out infinite;
+  }
+
+  .loading-path-secondary {
+    stroke-dasharray: 30;
+    stroke-dashoffset: 30;
+    animation: pathDraw 2s ease-in-out infinite 0.5s;
+  }
+
+  .loading-circle {
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+    animation: circleRotate 1.5s linear infinite;
+    transform-origin: center;
+  }
+
+  .loading-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .loading-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #16a085;
+    animation: dotBounce 1.4s ease-in-out infinite both;
+  }
+
+  .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+  .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0s; }
+
+  .chart-loading p {
+    font-size: 14px;
+    font-weight: 500;
+    margin: 0;
+    text-align: center;
+    opacity: 0.8;
+    animation: textPulse 2s ease-in-out infinite;
+  }
+
+  .chart-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 280px;
+    color: #bdc3c7;
+    font-family: 'Cairo', sans-serif;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  :global(.dark-mode) .chart-empty {
+    color: #718096;
+  }
+
+  /* Stat card loading states */
+  .stat-loading-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stat-loading-svg {
+    width: 32px;
+    height: 32px;
+    animation: clockTick 2s ease-in-out infinite;
+  }
+
+  .stat-loading-circle {
+    stroke-dasharray: 62.8;
+    stroke-dashoffset: 62.8;
+    animation: progressFill 2s ease-in-out infinite;
+    transform-origin: center;
+    transform: rotate(-90deg);
+  }
+
+  .stat-loading-path {
+    animation: clockHand 2s ease-in-out infinite;
+    transform-origin: 12px 12px;
+  }
+
+  /* Professional Loading Animations Keyframes */
+  @keyframes pathDraw {
+    0% {
+      stroke-dashoffset: 60;
+      opacity: 0.3;
+    }
+    50% {
+      stroke-dashoffset: 0;
+      opacity: 1;
+    }
+    100% {
+      stroke-dashoffset: -60;
+      opacity: 0.3;
+    }
+  }
+
+  @keyframes circleRotate {
+    0% {
+      stroke-dashoffset: 20;
+      transform: rotate(0deg);
+    }
+    50% {
+      stroke-dashoffset: 5;
+      transform: rotate(180deg);
+    }
+    100% {
+      stroke-dashoffset: 20;
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes dotBounce {
+    0%, 80%, 100% {
+      transform: scale(0.8);
+      opacity: 0.5;
+    }
+    40% {
+      transform: scale(1.2);
+      opacity: 1;
+    }
+  }
+
+  @keyframes textPulse {
+    0%, 100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes clockTick {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.1);
+    }
+  }
+
+  @keyframes progressFill {
+    0% {
+      stroke-dashoffset: 62.8;
+    }
+    50% {
+      stroke-dashoffset: 31.4;
+    }
+    100% {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes clockHand {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes fadeInScale {
+    0% {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200px 0;
+    }
+    100% {
+      background-position: 200px 0;
+    }
+  }
+
+  /* Professional Overlay Loading */
+  .professional-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeInScale 0.5s ease-out;
+  }
+
+  .professional-loading-content {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    padding: 40px;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    max-width: 400px;
+    width: 90%;
+    animation: fadeInScale 0.5s ease-out 0.2s both;
+  }
+
+  :global(.dark-mode) .professional-loading-content {
+    background: rgba(45, 55, 72, 0.95);
+    color: #e2e8f0;
+  }
+
+  .loading-icon-large {
+    margin-bottom: 24px;
+  }
+
+  .main-loading-svg {
+    width: 80px;
+    height: 80px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .loading-circle-bg {
+    opacity: 0.2;
+  }
+
+  .loading-circle-progress {
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+    animation: progressCircle 3s ease-in-out infinite;
+    transform-origin: center;
+    transform: rotate(-90deg);
+  }
+
+  .loading-chart-icon {
+    stroke-dasharray: 40;
+    stroke-dashoffset: 40;
+    animation: pathDraw 2s ease-in-out infinite 0.5s;
+  }
+
+  .loading-refresh-icon {
+    animation: spin 2s linear infinite;
+    transform-origin: center;
+  }
+
+  .loading-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #16a085;
+    margin: 0 0 12px 0;
+    font-family: 'Cairo', sans-serif;
+    animation: textPulse 2s ease-in-out infinite;
+  }
+
+  :global(.dark-mode) .loading-title {
+    color: #1abc9c;
+  }
+
+  .loading-subtitle {
+    font-size: 14px;
+    color: #7f8c8d;
+    margin: 0 0 24px 0;
+    font-family: 'Cairo', sans-serif;
+    line-height: 1.5;
+  }
+
+  :global(.dark-mode) .loading-subtitle {
+    color: #a0aec0;
+  }
+
+  .loading-progress-bar {
+    width: 100%;
+    height: 4px;
+    background-color: #e1e8ed;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 20px;
+  }
+
+  :global(.dark-mode) .loading-progress-bar {
+    background-color: #4a5568;
+  }
+
+  .loading-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #16a085, #1abc9c, #16a085);
+    background-size: 200% 100%;
+    border-radius: 2px;
+    animation: progressBar 2s ease-in-out infinite;
+  }
+
+  @keyframes progressCircle {
+    0% {
+      stroke-dashoffset: 283;
+    }
+    50% {
+      stroke-dashoffset: 70;
+    }
+    100% {
+      stroke-dashoffset: 283;
+    }
+  }
+
+  @keyframes progressBar {
+    0% {
+      width: 0%;
+      background-position: -200% 0;
+    }
+    50% {
+      width: 70%;
+      background-position: 0% 0;
+    }
+    100% {
+      width: 100%;
+      background-position: 200% 0;
+    }
   }

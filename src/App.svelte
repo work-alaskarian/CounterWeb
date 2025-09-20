@@ -7,6 +7,7 @@
 	import AnalyticsDashboard from './components/AnalyticsDashboard.svelte';
 	import Map from './components/Map.svelte';
 	import WebSocketLog from './components/WebSocketLog.svelte';
+	// import Footer from './components/Footer.svelte';
 	// import ConnectionBanner from './components/ConnectionBanner.svelte';
 
 	console.log('🔍 APP: All imports loaded');
@@ -84,10 +85,10 @@
 
 	// Add scroll listener
 	import { onMount, onDestroy } from 'svelte';
+	import globalWebSocketService from './lib/services/global-websocket.js';
 	import {
 		loadLocations
 	} from './lib/stores/analytics-simple.js';
-	import globalWebSocketService from './lib/services/global-websocket.js';
 	
 	
 	onMount(async () => {
@@ -126,11 +127,14 @@
 			await loadLocations();
 			console.log('✅ SIMPLE: Locations loaded successfully');
 
-			console.log('⏰ SIMPLE: Setting up global real-time WebSocket connection...');
+			console.log('⏰ SIMPLE: ===== STARTING WEBSOCKET SETUP =====');
+			console.log('⏰ SIMPLE: Main location for LiveCounter:', mainLocation);
+			console.log('⏰ SIMPLE: About to call globalWebSocketService.connect()...');
 
 			// Connect to global WebSocket service
 			globalWebSocketService.connect();
-			console.log('✅ SIMPLE: Global real-time connection setup complete');
+			console.log('✅ SIMPLE: globalWebSocketService.connect() call completed');
+			console.log('✅ SIMPLE: ===== WEBSOCKET SETUP COMPLETE =====');
 
 			console.log('✅ SIMPLE: CounterWeb app ready! Components will load their own data.');
 		} catch (error) {
@@ -164,7 +168,8 @@
 	<!-- Navigation Header -->
 	<header class="navigation-header">
 		<div class="brand">
-			<h1>نظام عداد الأشخاص</h1>
+			<img src="/logo.png" alt="العتبة العسكرية المقدسة" class="brand-logo" />
+			<h1>العتبة العسكرية المقدسة</h1>
 		</div>
 		
 		<nav class="navigation">
@@ -205,10 +210,10 @@
 		<section id="hero" class="hero-section">
 			<div class="hero-content">
 				<div class="hero-icon">
-					<span class="material-icons">mosque</span>
+					<img src="/logo.png" alt="العتبة العسكرية المقدسة" class="hero-logo" />
 				</div>
-				<h1 class="hero-title">عداد زوار الحرم الشريف</h1>
-				<p class="hero-subtitle">نظام متقدم لتتبع وإحصاء زوار الأماكن المقدسة بدقة وفعالية</p>
+				<h1 class="hero-title">نظام إحصاء زوار العتبة العسكرية المقدسة</h1>
+				<p class="hero-subtitle">نظام متقدم لتتبع وإحصاء زوار العتبة المقدسة بدقة وفعالية</p>
 				<div class="hero-stats">
 					<div class="stat-item">
 						<span class="stat-number">1,500+</span>
@@ -272,7 +277,9 @@
 			<Map on:mapmousemove={e => mouseCoords = e.detail.latlng} />
 		</section>
 	</main>
-	
+
+	<!-- Footer removed -->
+
 	<!-- WebSocket Message Log (floating component) -->
 	<WebSocketLog />
 </div>
@@ -331,12 +338,44 @@
 		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 	}
 
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.brand-logo {
+		width: 45px;
+		height: 45px;
+		object-fit: contain;
+		filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(500%) hue-rotate(140deg) brightness(95%) contrast(90%) drop-shadow(0 2px 6px rgba(22, 160, 133, 0.3));
+		transition: all 0.3s ease;
+	}
+
+	.brand-logo:hover {
+		transform: scale(1.05);
+		filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(500%) hue-rotate(140deg) brightness(100%) contrast(95%) drop-shadow(0 4px 10px rgba(22, 160, 133, 0.4));
+	}
+
+	:global(.dark-mode) .brand-logo {
+		filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(424%) hue-rotate(113deg) brightness(98%) contrast(91%) drop-shadow(0 2px 8px rgba(26, 188, 156, 0.4));
+	}
+
+	:global(.dark-mode) .brand-logo:hover {
+		filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(424%) hue-rotate(113deg) brightness(105%) contrast(95%) drop-shadow(0 4px 12px rgba(26, 188, 156, 0.5));
+	}
+
 	.brand h1 {
 		color: #16a085;
-		font-size: 22px;
+		font-size: 24px;
 		font-weight: 700;
 		margin: 0;
 		font-family: 'Cairo', sans-serif;
+		letter-spacing: 0.5px;
+	}
+
+	:global(.dark-mode) .brand h1 {
+		color: #1abc9c;
 	}
 
 	.navigation {
@@ -518,6 +557,42 @@
 		font-size: 80px;
 		color: #16a085;
 		text-shadow: 0 4px 8px rgba(22, 160, 133, 0.3);
+	}
+
+	.hero-logo {
+		width: 120px;
+		height: 120px;
+		object-fit: contain;
+		filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(500%) hue-rotate(140deg) brightness(95%) contrast(90%) drop-shadow(0 8px 16px rgba(22, 160, 133, 0.4));
+		animation: heroLogoFloat 4s ease-in-out infinite;
+		transition: all 0.3s ease;
+	}
+
+	:global(.dark-mode) .hero-logo {
+		filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(424%) hue-rotate(113deg) brightness(98%) contrast(91%) drop-shadow(0 8px 20px rgba(26, 188, 156, 0.5));
+		animation: heroLogoFloatDark 4s ease-in-out infinite;
+	}
+
+	@keyframes heroLogoFloat {
+		0%, 100% {
+			transform: translateY(0px) scale(1);
+			filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(500%) hue-rotate(140deg) brightness(95%) contrast(90%) drop-shadow(0 8px 16px rgba(22, 160, 133, 0.4));
+		}
+		50% {
+			transform: translateY(-10px) scale(1.02);
+			filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(600%) hue-rotate(140deg) brightness(100%) contrast(95%) drop-shadow(0 12px 24px rgba(22, 160, 133, 0.5));
+		}
+	}
+
+	@keyframes heroLogoFloatDark {
+		0%, 100% {
+			transform: translateY(0px) scale(1);
+			filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(424%) hue-rotate(113deg) brightness(98%) contrast(91%) drop-shadow(0 8px 20px rgba(26, 188, 156, 0.5));
+		}
+		50% {
+			transform: translateY(-10px) scale(1.02);
+			filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(500%) hue-rotate(113deg) brightness(105%) contrast(95%) drop-shadow(0 12px 28px rgba(26, 188, 156, 0.6));
+		}
 	}
 
 	.hero-title {

@@ -11,6 +11,9 @@ class GlobalWebSocketService {
     this.connectionCallbacks = new Set(); // connection status callbacks
     this.currentTimeframe = 'HOURLY'; // Track current timeframe
     this.isReconnecting = false; // Track if we're reconnecting due to timeframe change
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectDelay = 3000; // Start with 3 seconds
 
     console.log('🌐 Global WebSocket Service initialized');
   }
@@ -20,47 +23,50 @@ class GlobalWebSocketService {
    */
   connect() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      console.log('🌐 Already connected to WebSocket');
+      console.info('🌐 Already connected to WebSocket');
       return;
     }
 
-    const wsUrl = 'ws://10.10.1.205:8080/ws/analytics';
-    console.log(`🌐 Connecting to ${wsUrl}`);
+    const wsUrl = import.meta.env.VITE_WEBSOCKET_URL || 'ws://10.10.1.205:8080/ws/analytics';
+    console.info(`🌐 Connecting to: ${wsUrl}`);
 
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      console.log('🌐 ✅ Global WebSocket connected');
+      console.log('🌐 ✅ WebSocket connected');
       this.isConnected = true;
       this.isReconnecting = false;
+      this.reconnectAttempts = 0;
+      this.reconnectDelay = 3000;
 
-      // Notify all connection callbacks
+      // Notify connection callbacks
       this.connectionCallbacks.forEach(callback => {
         try {
           callback({ type: 'connected' });
         } catch (error) {
-          console.error('🌐 Error in connection callback:', error);
+          console.error('🌐 Connection callback error:', error);
         }
       });
 
-      // Subscribe to live count pattern for all locations with current timeframe
+      // Send subscription and start keep-alive
       this.sendSubscription();
+      this.startKeepAlive();
     };
 
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('🌐 📨 Raw WebSocket message:', data);
-
         this.handleMessage(data);
       } catch (error) {
-        console.error('🌐 Error parsing WebSocket message:', error);
+        console.error('🌐 Message parse error:', error);
       }
     };
 
-    this.ws.onclose = () => {
-      console.log('🌐 🔌 WebSocket disconnected');
+    this.ws.onclose = (event) => {
       this.isConnected = false;
+      if (event.code !== 1000) {
+        console.warn(`🌐 WebSocket closed (code: ${event.code})`, event.reason);
+      }
 
       // Only notify disconnection if we're not intentionally reconnecting
       if (!this.isReconnecting) {
@@ -72,23 +78,36 @@ class GlobalWebSocketService {
           }
         });
 
-        // Attempt to reconnect after 5 seconds (only for unexpected disconnections)
-        setTimeout(() => {
-          console.log('🌐 🔄 Attempting to reconnect...');
-          this.connect();
-        }, 5000);
+        // Attempt to reconnect with exponential backoff
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnectAttempts++;
+          const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
+          console.info(`🌐 Reconnecting (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+
+          setTimeout(() => {
+            this.connect();
+          }, delay);
+        } else {
+          console.error('🌐 Max reconnection attempts reached');
+          this.connectionCallbacks.forEach(callback => {
+            try {
+              callback({ type: 'fallback', reason: 'WebSocket connection failed after multiple attempts' });
+            } catch (error) {
+              console.error('🌐 Connection callback error:', error);
+            }
+          });
+        }
       }
     };
 
     this.ws.onerror = (error) => {
-      console.error('🌐 ❌ WebSocket error:', error);
+      console.error('🌐 WebSocket error:', error);
 
-      // Notify all connection callbacks
       this.connectionCallbacks.forEach(callback => {
         try {
           callback({ type: 'error', error });
         } catch (error) {
-          console.error('🌐 Error in connection callback:', error);
+          console.error('🌐 Connection callback error:', error);
         }
       });
     };
@@ -111,6 +130,14 @@ class GlobalWebSocketService {
 
       console.log('🌐 ✅ Timeframe matches, processing data');
       console.log('🌐 📊 Full data received:', data.data);
+      console.log('🌐 🕐 Server timestamp:', data.data?.timestamp);
+      console.log('🌐 📈 IMPORTANT COUNTS:');
+      console.log('  🔢 Current hour total_count:', data.data?.total_count);
+      console.log('  📊 All-time total_all_time:', data.data?.total_all_time);
+      console.log('  👨 Men region live:', data.data?.men_region?.live);
+      console.log('  👨 Men region total:', data.data?.men_region?.total);
+      console.log('  👩 Women region live:', data.data?.women_region?.live);
+      console.log('  👩 Women region total:', data.data?.women_region?.total);
 
       // Extract different counts for different locations
       const menRegionLive = data.data?.men_region?.live;
@@ -171,12 +198,20 @@ class GlobalWebSocketService {
    * Subscribe to live count updates - SIMPLE
    */
   subscribe(locationId, callback) {
-    console.log(`🌐 📝 Subscribing ${locationId} to live count updates`);
+    console.log(`🌐 📝 🚀 SUBSCRIBE called for locationId: ${locationId}`);
+    console.log(`🌐 📊 Current subscribers before add:`, Array.from(this.subscribers.keys()));
+    console.log(`🌐 🔧 Connection status: ${this.isConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+
     this.subscribers.set(locationId, callback);
+    console.log(`🌐 ✅ Subscriber added. Total subscribers: ${this.subscribers.size}`);
+    console.log(`🌐 📊 All subscribers:`, Array.from(this.subscribers.keys()));
 
     // Connect if not already connected
     if (!this.isConnected) {
+      console.log(`🌐 🔌 Not connected, calling connect()...`);
       this.connect();
+    } else {
+      console.log(`🌐 ✅ Already connected, no need to reconnect`);
     }
 
     // Return unsubscribe function
@@ -204,21 +239,59 @@ class GlobalWebSocketService {
   }
 
   /**
+   * Start keep-alive ping to prevent server timeout
+   */
+  startKeepAlive() {
+    console.log('🌐 💓 Starting keep-alive ping every 30 seconds');
+
+    // Clear any existing keep-alive
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval);
+    }
+
+    this.keepAliveInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        console.log('🌐 💓 Sending keep-alive ping...');
+        this.ws.send(JSON.stringify({ action: "ping" }));
+      } else {
+        console.log('🌐 💓 WebSocket not open, stopping keep-alive');
+        clearInterval(this.keepAliveInterval);
+      }
+    }, 30000);
+  }
+
+  /**
    * Send subscription message with current timeframe
    */
   sendSubscription() {
+    console.log('🌐 📤 sendSubscription() called');
+    console.log('🌐 📊 WebSocket state:', this.ws ? this.ws.readyState : 'null');
+    console.log('🌐 📊 WebSocket.OPEN constant:', WebSocket.OPEN);
+
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const subscribeMessage = {
         action: "subscribe_pattern",
         pattern: "live_count",
         locationId: "all",
-        interval: 3,
+        interval: 5, // Better interval for viewing updates (5 seconds)
         timeframe: this.currentTimeframe
       };
-      console.log('🌐 📤 Subscribing to live count pattern:', subscribeMessage);
-      this.ws.send(JSON.stringify(subscribeMessage));
+
+      console.log('🌐 📤 SENDING SUBSCRIPTION MESSAGE:', subscribeMessage);
+      console.log('🌐 📤 Message as JSON:', JSON.stringify(subscribeMessage));
+
+      try {
+        this.ws.send(JSON.stringify(subscribeMessage));
+        console.log('🌐 ✅ Subscription message sent successfully!');
+        console.log('🌐 📊 WebSocket state after send:', this.ws.readyState);
+      } catch (error) {
+        console.error('🌐 ❌ Failed to send subscription message:', error);
+        console.error('🌐 📊 WebSocket state when send failed:', this.ws.readyState);
+      }
     } else {
-      console.log('🌐 ⚠️ Cannot send subscription - WebSocket not connected');
+      console.error('🌐 ❌ Cannot send subscription - WebSocket not connected or not ready');
+      console.error('🌐 ❌ WebSocket exists:', !!this.ws);
+      console.error('🌐 ❌ WebSocket readyState:', this.ws ? this.ws.readyState : 'WebSocket is null');
     }
   }
 

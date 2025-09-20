@@ -215,3 +215,237 @@
       padding: 1.5rem;
     }
   }
+
+  /* Professional Loading Animations */
+
+  /* Dots Loader */
+  .dots-loader {
+    display: inline-flex;
+    gap: 6px;
+  }
+
+  .dots-loader span {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #16a085;
+    animation: dotBounce 1.4s ease-in-out infinite both;
+  }
+
+  .dots-loader span:nth-child(1) { animation-delay: -0.32s; }
+  .dots-loader span:nth-child(2) { animation-delay: -0.16s; }
+  .dots-loader span:nth-child(3) { animation-delay: 0s; }
+
+  @keyframes dotBounce {
+    0%, 80%, 100% {
+      transform: scale(0.8);
+      opacity: 0.5;
+    }
+    40% {
+      transform: scale(1.2);
+      opacity: 1;
+    }
+  }
+
+  /* Bars Loader */
+  .bars-loader {
+    display: inline-flex;
+    gap: 4px;
+    align-items: flex-end;
+    height: 40px;
+  }
+
+  .bars-loader span {
+    width: 6px;
+    background: linear-gradient(to top, #16a085, #1abc9c);
+    animation: barWave 1.2s ease-in-out infinite;
+    border-radius: 3px 3px 0 0;
+  }
+
+  .bars-loader span:nth-child(1) { animation-delay: 0s; height: 15px; }
+  .bars-loader span:nth-child(2) { animation-delay: 0.1s; height: 25px; }
+  .bars-loader span:nth-child(3) { animation-delay: 0.2s; height: 35px; }
+  .bars-loader span:nth-child(4) { animation-delay: 0.3s; height: 25px; }
+  .bars-loader span:nth-child(5) { animation-delay: 0.4s; height: 15px; }
+
+  @keyframes barWave {
+    0%, 100% {
+      transform: scaleY(0.6);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+
+  /* Pulse Loader */
+  .pulse-loader {
+    width: 60px;
+    height: 60px;
+    display: inline-block;
+  }
+
+  .pulse-loader svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .pulse-outer, .pulse-inner, .pulse-center {
+    fill: none;
+    stroke: #16a085;
+    stroke-width: 2;
+    opacity: 0.3;
+    animation: pulseRing 2s ease-out infinite;
+  }
+
+  .pulse-inner { animation-delay: 0.3s; }
+  .pulse-center { animation-delay: 0.6s; }
+
+  @keyframes pulseRing {
+    0% {
+      opacity: 1;
+      transform: scale(0.8);
+      transform-origin: center;
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.2);
+      transform-origin: center;
+    }
+  }
+
+  /* Chart Loader */
+  .chart-loader {
+    width: 80px;
+    height: 60px;
+    display: inline-block;
+  }
+
+  .chart-loader svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .chart-line {
+    stroke: #16a085;
+    stroke-width: 3;
+    fill: none;
+    stroke-dasharray: 150;
+    stroke-dashoffset: 150;
+    animation: chartDraw 2s ease-in-out infinite;
+  }
+
+  .chart-dot {
+    fill: #16a085;
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+
+  .chart-dot:nth-child(2) { animation-delay: 0.2s; }
+  .chart-dot:nth-child(3) { animation-delay: 0.4s; }
+  .chart-dot:nth-child(4) { animation-delay: 0.6s; }
+  .chart-dot:nth-child(5) { animation-delay: 0.8s; }
+  .chart-dot:nth-child(6) { animation-delay: 1s; }
+
+  @keyframes chartDraw {
+    0% {
+      stroke-dashoffset: 150;
+      opacity: 0.3;
+    }
+    50% {
+      stroke-dashoffset: 0;
+      opacity: 1;
+    }
+    100% {
+      stroke-dashoffset: -150;
+      opacity: 0.3;
+    }
+  }
+
+  @keyframes dotPulse {
+    0%, 100% { r: 4; opacity: 0.5; }
+    50% { r: 6; opacity: 1; }
+  }
+
+  /* Progress Bar */
+  .progress-container {
+    width: 100%;
+    max-width: 200px;
+    height: 4px;
+    background: #e1e8ed;
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 16px auto 8px;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #16a085, #1abc9c);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    animation: shimmer 2s linear infinite;
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  /* Card variant */
+  .loading-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    min-height: 150px;
+  }
+
+  .loading-card .loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* Size adjustments for new types */
+  .loading-small .dots-loader span {
+    width: 8px;
+    height: 8px;
+  }
+
+  .loading-large .dots-loader span {
+    width: 16px;
+    height: 16px;
+  }
+
+  .loading-small .bars-loader {
+    height: 24px;
+  }
+
+  .loading-large .bars-loader {
+    height: 56px;
+  }
+
+  .loading-small .pulse-loader,
+  .loading-small .chart-loader {
+    width: 40px;
+    height: 40px;
+  }
+
+  .loading-large .pulse-loader,
+  .loading-large .chart-loader {
+    width: 100px;
+    height: 80px;
+  }
+
+  /* Dark mode support */
+  :global(.dark-mode) .loading-card {
+    background: #2d3748;
+  }
+
+  :global(.dark-mode) .loading-message {
+    color: #e2e8f0;
+  }
+
+  :global(.dark-mode) .progress-container {
+    background: #4a5568;
+  }

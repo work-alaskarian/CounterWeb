@@ -1,0 +1,274 @@
+"""Root query: analytics data"""
+type Query {
+  # Locations
+  all_locations: [LocationType!]!
+  all_locations_total: LocationType!
+  location(id: String!): LocationType
+
+  # Dashboard
+  analytics_summary(timeframe: Timeframe = DAILY): AnalyticsSummaryType!
+  analytics_chart(chart_type: String!, timeframe: Timeframe = MONTHLY): ChartType!
+
+  # History & map
+  history(
+    page: Int = 1
+    limit: Int = 10
+    sort_by: String
+    sort_order: String = "desc"
+    search: String
+    date_from: String
+    status: String
+  ): HistoryPayloadType!
+  map_points: [MapPointType!]!
+
+  # Activity processing (JSON-as-string payloads)
+  realtime_count(location_id: String, camera_id: String): String!
+  sampling_data(location_id: String!, period: String = "minutely"): String!
+  historical_data(location_id: String, period: String = "monthly", for_reports: Boolean = false): String!
+  locations_for_filtering: String!
+  cameras_for_filtering(location_id: String): String!
+
+  # Cameras & events
+  all_cameras(status: CameraStatus): [CameraType!]!
+  camera(camera_id: String!): CameraType
+  camera_location_assignments(camera_id: String): [CameraLocationAssignmentType!]!
+  activity_events(
+    camera_id: String
+    location_id: String
+    event_type: EventType
+    limit: Int = 100
+  ): [ActivityEventType!]!
+
+  camera_aggregations(
+    camera_id: String
+    location_id: String
+    period_type: PeriodType
+    limit: Int = 100
+  ): [CameraAggregationType!]!
+
+  location_aggregations(
+    location_id: String
+    period_type: PeriodType
+    limit: Int = 100
+  ): [LocationAggregationType!]!
+}
+
+"""Root mutations: create/update resources"""
+type Mutation {
+  # NOTE: create_location / add_location are defined but disabled in implementation.
+  create_location(input: LocationInput!): LocationType
+  add_location(name: String!, initial_count: Int = 0): LocationType
+
+  remove_location(id: String!): String!
+  update_location_count(location_id: String!, count: Int!): LocationType
+  add_historical_count(location_id: String!, count: Int!, timestamp: String!): String
+
+  # Activity processing helpers
+  add_activity(
+    camera_id: String!
+    location_id: String
+    face_id: String
+    event_type: String
+  ): String!
+
+  add_location_new(location_data: String!): String!
+  add_camera(camera_data: String!): String!
+
+  # New schema mutations (typed)
+  create_camera(input: CameraInput!): CameraType!
+  update_camera_status(camera_id: String!, status: CameraStatus!): CameraType
+  assign_camera_to_location(input: CameraLocationAssignmentInput!): CameraLocationAssignmentType!
+  create_activity_event(input: ActivityEventInput!): ActivityEventType!
+}
+
+"""Root subscriptions: live updates"""
+type Subscription {
+  live_count(location_id: String!): Int!
+  live_count_updates: LiveCountUpdateType!
+}
+
+# ----------------
+# Enums
+# ----------------
+enum Timeframe {
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum CameraStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  ERROR
+}
+
+enum EventType {
+  FACE_DETECTION
+  MANUAL_COUNT
+  SYSTEM_EVENT
+  CALIBRATION
+}
+
+enum PeriodType {
+  MINUTE
+  HOUR
+  DAY
+  WEEK
+  MONTH
+}
+
+# ----------------
+# Objects
+# ----------------
+type LocationType {
+  id: String!
+  name: String!
+  live_count: Int!
+
+  summary(timeframe: Timeframe = HOURLY): LocationSummaryType!
+  historical_data(timeframe: Timeframe = HOURLY): [Int!]!
+}
+
+type LocationSummaryType {
+  text: String!
+  change_percentage: String!
+  change_direction: String!
+}
+
+type AnalyticsSummaryType {
+  total_visitors: Int!
+  new_visitors: Int!
+  avg_visit_duration_hours: Float!
+  peak_visitors_today: Int!
+}
+
+type ChartDatasetType {
+  label: String!
+  data: [Float!]!
+}
+
+type ChartType {
+  labels: [String!]!
+  datasets: [ChartDatasetType!]!
+}
+
+type HistoricalRecordType {
+  id: String!
+  date: String!
+  location: String!
+  count: Int!
+  status: String!
+  category: String!
+}
+
+type HistoryPayloadType {
+  total_items: Int!
+  total_pages: Int!
+  current_page: Int!
+  data: [HistoricalRecordType!]!
+}
+
+type MapPointType {
+  lat: Float!
+  lng: Float!
+  text: String!
+  count: Int!
+}
+
+type LiveCountUpdateType {
+  location_id: String!
+  live_count: Int!
+  timestamp: String!
+  change_from_previous: Int
+}
+
+type CameraType {
+  id: String!
+  camera_id: String!
+  camera_name: String!
+  rtsp_url: String!
+  status: CameraStatus!
+  created_at: String!
+  updated_at: String!
+  current_location_id: String
+}
+
+type CameraLocationAssignmentType {
+  id: String!
+  camera_id: String!
+  location_id: String!
+  assigned_at: String!
+  unassigned_at: String
+  assigned_by: String!
+  reason: String
+}
+
+type ActivityEventType {
+  id: String!
+  camera_id: String!
+  location_id: String!
+  detected_faces: [String!]!
+  face_count: Int!
+  temp_count: Int!
+  timestamp: String!
+  event_type: EventType!
+}
+
+type CameraAggregationType {
+  id: String!
+  camera_id: String!
+  location_id: String!
+  period_type: PeriodType!
+  period_start: String!
+  period_end: String!
+  unique_faces: Int!
+  total_detections: Int!
+  calculated_at: String!
+}
+
+type LocationAggregationType {
+  id: String!
+  location_id: String!
+  period_type: PeriodType!
+  period_start: String!
+  period_end: String!
+  unique_faces: Int!
+  total_detections: Int!
+  contributing_cameras: [String!]!
+  calculated_at: String!
+}
+
+# ----------------
+# Inputs
+# ----------------
+input LocationInput {
+  location_id: String
+  name: String
+  camera_id: String
+  initial_count: Int = 0
+}
+
+input CameraInput {
+  camera_id: String!
+  camera_name: String!
+  rtsp_url: String!
+  status: CameraStatus = ACTIVE
+}
+
+input CameraLocationAssignmentInput {
+  camera_id: String!
+  location_id: String!
+  assigned_by: String = "system"
+  reason: String
+}
+
+input ActivityEventInput {
+  camera_id: String!
+  location_id: String!
+  detected_faces: [String!]
+  face_count: Int
+  temp_count: Int
+  event_type: EventType = FACE_DETECTION
+}

@@ -18,13 +18,13 @@
   export let cardSize = 'normal';
 
   // Component state - simple and direct
-  let count = 0;
-  let displayCount = 0;
+  let count = location.initialCount || 0;
+  let displayCount = location.initialCount || 0;
   let currentDate = '';
   let chartComponent;
   let chartContainer;
   let chartData = [];
-  let isLoading = true;
+  let isLoading = false; // Start with false to show counter immediately
   let connectionStatus = 'connecting';
 
   // Animation state
@@ -36,10 +36,19 @@
   let unsubscribeFromConnection = null;
 
   onMount(() => {
+    console.log(`🚀 LIVECOUNTER: onMount() called for location: ${location.id}`);
+    console.log(`🚀 LIVECOUNTER: Component props:`, {
+      location_id: location.id,
+      location_name: location.name,
+      timeframe: timeframe,
+      initial_count: location.initialCount
+    });
+
     displayDate();
     initializeSimpleWebSocket();
 
     return () => {
+      console.log(`🧹 LIVECOUNTER: Cleanup called for location: ${location.id}`);
       cleanup();
     };
   });
@@ -52,13 +61,32 @@
    * Initialize simple WebSocket connection using global service
    */
   function initializeSimpleWebSocket() {
-    console.log(`🔄 SIMPLE LiveCounter: Connecting to global WebSocket for location: ${location.id}`);
+    console.log(`🔄 SIMPLE LiveCounter: ===== INITIALIZING WEBSOCKET =====`);
+    console.log(`🔄 SIMPLE LiveCounter: Location ID: ${location.id}`);
+    console.log(`🔄 SIMPLE LiveCounter: Location Name: ${location.name}`);
+    console.log(`🔄 SIMPLE LiveCounter: Timeframe: ${timeframe}`);
+    console.log(`🔄 SIMPLE LiveCounter: Initial Count: ${count}`);
 
+    console.log(`🔄 SIMPLE LiveCounter: 1️⃣ Subscribing to data updates...`);
     // Subscribe to data updates from global WebSocket service
     unsubscribeFromData = globalWebSocketService.subscribe(location.id, handleSimpleLiveCountUpdate);
+    console.log(`🔄 SIMPLE LiveCounter: ✅ Data subscription completed`);
 
+    console.log(`🔄 SIMPLE LiveCounter: 2️⃣ Subscribing to connection status...`);
     // Subscribe to connection status changes
     unsubscribeFromConnection = globalWebSocketService.onConnectionChange(handleConnectionChange);
+    console.log(`🔄 SIMPLE LiveCounter: ✅ Connection status subscription completed`);
+
+    console.log(`🔄 SIMPLE LiveCounter: ===== WEBSOCKET INIT COMPLETE =====`);
+
+    // Timeout to stop showing loading after 3 seconds if no connection
+    setTimeout(() => {
+      if (isLoading) {
+        console.log(`⏱️ SIMPLE LiveCounter: Timeout - stopping loading state for ${location.id}`);
+        isLoading = false;
+        connectionStatus = 'disconnected';
+      }
+    }, 3000);
   }
 
   /**
@@ -95,7 +123,7 @@
       // IMMEDIATE reset count to 0 when timeframe changes
       console.log(`🔄 SIMPLE LiveCounter: Timeframe changed, IMMEDIATE reset ${location.id} to 0`);
       connectionStatus = 'connecting';
-      isLoading = true;
+      isLoading = false; // Don't show loading on timeframe change
 
       // Clear any ongoing animation
       if (animationInterval) {
