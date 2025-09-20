@@ -137,15 +137,9 @@ function scheduleBufferedUIUpdate(locationId, count, data) {
 
   uiUpdateTimer = setTimeout(() => {
     console.log(`⏰ BUFFER TIMER EXPIRED: 10 seconds completed, now applying updates to UI`);
-    console.log(`🎯 TIMER COMPLETION: ${pendingUIUpdates.size} pending updates will now be displayed`);
-    const startTime = Date.now();
     applyPendingUIUpdates();
-    const endTime = Date.now();
-    console.log(`✅ UI UPDATE COMPLETED: All buffered updates applied to display in ${endTime - startTime}ms`);
     uiUpdateTimer = null;
   }, UI_UPDATE_BUFFER_DELAY);
-
-  console.log(`⏰ BUFFERED UPDATE SCHEDULED for ${locationId}: ${count} (pending: ${pendingUIUpdates.size})`);
 }
 
 /**
@@ -156,10 +150,8 @@ export async function loadLocations() {
   error.set(null);
 
   try {
-    console.log('🔄 LOADING LOCATIONS FROM API...');
     const data = await analyticsAPI.getAllLocations();
-    console.log('✅ LOADED LOCATIONS:', data?.length || 0, 'locations');
-    console.log('📍 LOCATION IDs:', data?.map(loc => ({ id: loc.id, name: loc.name, liveCount: loc.liveCount })));
+    console.info(`✅ Loaded ${data?.length || 0} locations`);
 
     // Add aggregated "all" location
     const locationsWithAll = data || [];
@@ -174,7 +166,7 @@ export async function loadLocations() {
     locations.set(locationsWithAll);
     return locationsWithAll;
   } catch (err) {
-    console.warn('⚠️ API not available, using fallback mode:', err.message);
+    console.warn('⚠️ API unavailable, using fallback mode:', err.message);
 
     // Don't set error - instead work offline with empty locations
     // The dashboard will add default test locations later
@@ -531,11 +523,9 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
           const REALTIME_THROTTLE_INTERVAL = 2000; // 2 seconds for real-time feel
 
           if (currentTime - lastProcessed < REALTIME_THROTTLE_INTERVAL) {
-            console.log(`⚡ Skipping update - too frequent (${currentTime - lastProcessed}ms ago, need ${REALTIME_THROTTLE_INTERVAL}ms)`);
             return;
           }
           lastMessageTime.set('live_updates', currentTime);
-          console.log(`🔍 REAL-TIME: Processing message after ${currentTime - lastProcessed}ms`);
 
           // Extract data from the new WebSocket format
           const locationId = data.location_id;
@@ -543,10 +533,7 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
           const changeFromPrevious = data.change_from_previous || 0;
           const updateNumber = data.update_number || 0;
 
-      console.log(`📊 Processing update #${updateNumber} for location: ${locationId}, change: ${changeFromPrevious}`);
-      console.log(`📊 Raw data received:`, updateData);
-      console.log(`📊 Data type:`, typeof updateData);
-      console.log(`📊 Data keys:`, Object.keys(updateData));
+      console.debug(`📊 Update #${updateNumber}: ${locationId} (${changeFromPrevious})`);
 
       // Handle different data structures based on location_id
       const locationUpdates = [];
@@ -556,40 +543,24 @@ export function setupRealTimeUpdates(timeframe = 'HOURLY') {
         let totalCount = 0;
 
         if (typeof updateData === 'number') {
-          // If data is directly a number
           totalCount = updateData;
-          console.log(`📊 Data is number: ${totalCount}`);
         } else if (updateData.total_count !== undefined) {
-          // If data has total_count field
           totalCount = updateData.total_count;
-          console.log(`📊 Using total_count: ${totalCount}`);
         } else if (updateData.count !== undefined) {
-          // If data has count field
           totalCount = updateData.count;
-          console.log(`📊 Using count: ${totalCount}`);
         } else if (updateData.live !== undefined) {
-          // If data has live field
           totalCount = updateData.live;
-          console.log(`📊 Using live: ${totalCount}`);
         } else if (updateData.value !== undefined) {
-          // If data has value field
           totalCount = updateData.value;
-          console.log(`📊 Using value: ${totalCount}`);
         } else if (changeFromPrevious !== undefined && changeFromPrevious !== 0) {
-          // If we have change info, try to use it with previous count
           const currentLocs = get(locations);
           const currentAllLoc = currentLocs.find(l => l.id === 'all');
           const previousCount = currentAllLoc ? currentAllLoc.liveCount : 0;
           totalCount = previousCount + changeFromPrevious;
-          console.log(`📊 Calculated from change: ${previousCount} + ${changeFromPrevious} = ${totalCount}`);
         } else {
-          console.warn(`⚠️ Could not extract count from data:`, updateData);
-          console.warn(`⚠️ Available data fields:`, Object.keys(updateData));
-          console.warn(`⚠️ Change from previous: ${changeFromPrevious}`);
+          console.warn(`⚠️ Could not extract count from:`, Object.keys(updateData));
           return;
         }
-
-        console.log(`📊 Final extracted total count: ${totalCount}`);
 
         locationUpdates.push({
           frontendId: 'all',
@@ -1079,46 +1050,34 @@ export const locationsByCount = derived(
 );
 
 // Initialize health check and periodic refresh system
-console.log('🚀 Initializing analytics store...');
-
 analyticsAPI.healthCheck().then(isHealthy => {
   if (isHealthy) {
-    console.log('✅ Analytics API is healthy');
-    
-    // Test GraphQL connection
+    console.info('✅ Analytics API healthy');
     analyticsAPI.testConnection().then(connected => {
       if (connected) {
-        console.log('✅ GraphQL connection verified');
-        
-        // Start periodic refresh for non-realtime data (5 minutes)
-        startPeriodicRefresh(300000); // 5 minutes
-        
+        startPeriodicRefresh(300000);
       } else {
-        console.warn('⚠️ CounterWeb: GraphQL connection test failed');
+        console.warn('⚠️ GraphQL connection failed');
         fallbackMode.set(true);
         fallbackReason.set('GraphQL connection failed');
       }
     });
   } else {
-    console.warn('⚠️ CounterWeb: Analytics API health check failed');
+    console.warn('⚠️ Analytics API health check failed');
     fallbackMode.set(true);
     fallbackReason.set('API health check failed');
   }
 });
 
-console.log('✅ Analytics store ready with hybrid WebSocket + GraphQL architecture');
+console.info('✅ Analytics store initialized');
 
 // 🧪 TESTING HELPERS - Available in browser console
 if (typeof window !== 'undefined') {
   window.testWebSocket = {
-    // Log current connection status
     status: () => {
-      console.log('🔌 WebSocket Status:', get(connectionStatus));
-      console.log('📊 Last Update:', get(lastUpdate));
-      console.log('📍 Locations:', get(locations));
-      console.log('⏳ Pending UI Updates:', pendingUIUpdates);
-      console.log('⏱️ Last UI Update Time:', new Date(lastUIUpdateTime).toLocaleTimeString());
-      console.log('⏰ UI Update Timer Active:', uiUpdateTimer !== null);
+      console.log('🔌 Status:', get(connectionStatus));
+      console.log('📊 Updates:', pendingUIUpdates.size, 'pending');
+      console.log('📍 Locations:', get(locations).length);
     },
 
     // Simulate live count update message (new backend format)
@@ -1136,7 +1095,7 @@ if (typeof window !== 'undefined') {
         timestamp: new Date().toISOString(),
         ...data
       };
-      console.log('🧪 Simulating live count update:', testMessage);
+      console.debug('🧪 Live update test:', testMessage.data?.total_count);
 
       // Send to message handler directly (like WebSocket would)
       // This will be processed by the live_count_update handler
@@ -1160,24 +1119,24 @@ if (typeof window !== 'undefined') {
         timestamp: new Date().toISOString(),
         ...data
       };
-      console.log('🧪 Simulating chart data point:', testMessage);
+      console.debug('🧪 Chart test:', testMessage.data_point?.total_count);
     },
 
     // Subscribe to live count pattern
     subscribeToLiveCount: (timeframe = 'HOURLY', locationId = 'all', interval = 3) => {
-      console.log('🧪 Testing live count subscription...');
+      console.debug('🧪 Live count subscription test');
       analyticsAPI.subscribeToLiveCountPattern(timeframe, locationId, interval);
     },
 
     // Subscribe to chart data pattern
     subscribeToChartData: (timeframe = 'HOURLY', locationId = 'all', interval = 10, limit = 20) => {
-      console.log('🧪 Testing chart data subscription...');
+      console.debug('🧪 Chart data subscription test');
       analyticsAPI.subscribeToChartDataPattern(timeframe, locationId, interval, limit);
     },
 
     // Force apply pending updates immediately (for testing)
     forceUpdate: () => {
-      console.log('🧪 Force applying buffered updates...');
+      console.debug('🧪 Force update test');
       if (uiUpdateTimer) {
         clearTimeout(uiUpdateTimer);
         uiUpdateTimer = null;
@@ -1187,7 +1146,7 @@ if (typeof window !== 'undefined') {
 
     // Clear all pending updates (for testing)
     clearPending: () => {
-      console.log('🧪 Clearing all pending buffered updates');
+      console.debug('🧪 Clear pending test');
       pendingUIUpdates.clear();
       if (uiUpdateTimer) {
         clearTimeout(uiUpdateTimer);
@@ -1199,13 +1158,5 @@ if (typeof window !== 'undefined') {
     api: analyticsAPI
   };
 
-  console.log('🧪 WebSocket Testing Helpers Available:');
-  console.log('   - window.testWebSocket.status() - Show current status & pending updates');
-  console.log('   - window.testWebSocket.simulateLiveUpdate({menLive: 50, womenLive: 100})');
-  console.log('   - window.testWebSocket.simulateChartPoint({menLive: 25, womenLive: 50})');
-  console.log('   - window.testWebSocket.subscribeToLiveCount(timeframe, locationId, interval)');
-  console.log('   - window.testWebSocket.subscribeToChartData(timeframe, locationId, interval, limit)');
-  console.log('   - window.testWebSocket.forceUpdate() - Apply buffered updates immediately');
-  console.log('   - window.testWebSocket.clearPending() - Clear all pending updates');
-  console.log('   - window.testWebSocket.api');
+  console.debug('🧪 Test helpers: window.testWebSocket');
 }

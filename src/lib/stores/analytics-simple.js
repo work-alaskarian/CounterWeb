@@ -11,7 +11,7 @@ export async function loadLocations() {
   error.set(null);
 
   try {
-    console.log('📊 Analytics Simple: Loading locations from GraphQL...');
+    console.debug('📊 Loading locations...');
 
     // Use GraphQL to get locations data
     const apiUrl = import.meta.env.VITE_API_URL || 'http://10.10.1.205:8080';
@@ -36,7 +36,7 @@ export async function loadLocations() {
 
     if (response.ok) {
       const result = await response.json();
-      console.log('✅ Analytics Simple: Got GraphQL locations:', result);
+      console.debug('✅ GraphQL response:', result?.data?.allLocations?.length || 0);
 
       // Update locations with GraphQL data
       if (result.data && result.data.allLocations) {
@@ -49,19 +49,18 @@ export async function loadLocations() {
         }));
 
         locations.set(graphqlLocations);
-        console.log('✅ Analytics Simple: Set locations from GraphQL:', graphqlLocations);
+        console.info(`✅ Loaded ${graphqlLocations.length} locations`);
       } else {
-        console.log('📊 Analytics Simple: No locations in GraphQL response, using empty array');
+        console.debug('📊 No locations in response');
         locations.set([]);
       }
     } else {
-      console.warn('⚠️ Analytics Simple: GraphQL request failed, using empty array');
+      console.warn('⚠️ GraphQL request failed');
       locations.set([]);
     }
 
-    console.log('✅ Analytics Simple: Locations loaded successfully from GraphQL');
   } catch (err) {
-    console.error('❌ Analytics Simple: Failed to load locations:', err);
+    console.error('❌ Failed to load locations:', err);
     error.set(err.message);
     // Set empty array on error
     locations.set([]);
@@ -72,39 +71,39 @@ export async function loadLocations() {
 
 export async function addLocation(location) {
   try {
-    console.log('➕ Analytics Simple: Adding location:', location);
+    console.debug('➕ Adding location:', location.id);
 
     locations.update(current => {
       // Check if location already exists
       const exists = current.find(loc => loc.id === location.id);
       if (exists) {
-        console.log('ℹ️ Analytics Simple: Location already exists, updating:', location.id);
+        console.debug('ℹ️ Updating location:', location.id);
         return current.map(loc =>
           loc.id === location.id ? { ...loc, ...location } : loc
         );
       } else {
-        console.log('✅ Analytics Simple: Added new location:', location.id);
+        console.debug('✅ Added location:', location.id);
         return [...current, location];
       }
     });
 
   } catch (err) {
-    console.error('❌ Analytics Simple: Failed to add location:', err);
+    console.error('❌ Failed to add location:', err);
     throw err;
   }
 }
 
 export async function removeLocation(locationId) {
   try {
-    console.log('🗑️ Analytics Simple: Removing location:', locationId);
+    console.debug('🗑️ Removing location:', locationId);
 
     locations.update(current =>
       current.filter(loc => loc.id !== locationId)
     );
 
-    console.log('✅ Analytics Simple: Location removed:', locationId);
+    console.debug('✅ Removed location:', locationId);
   } catch (err) {
-    console.error('❌ Analytics Simple: Failed to remove location:', err);
+    console.error('❌ Failed to remove location:', err);
     throw err;
   }
 }
@@ -112,5 +111,5 @@ export async function removeLocation(locationId) {
 export function setFallbackMode(inFallback, reason = '') {
   fallbackMode.set(inFallback);
   fallbackReason.set(reason);
-  console.log(`🔄 Analytics Simple: Fallback mode ${inFallback ? 'enabled' : 'disabled'}${reason ? `: ${reason}` : ''}`);
+  console.info(`🔄 Fallback mode ${inFallback ? 'enabled' : 'disabled'}${reason ? ': ' + reason : ''}`);
 }

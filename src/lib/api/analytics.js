@@ -18,7 +18,7 @@ class DirectAnalyticsService {
     const workerKey = `${locationId}_${timeframe}`;
     
     if (!this.workers.has(workerKey)) {
-      console.log(`🏭 Creating new WebSocket worker for ${locationId} (${timeframe})`);
+      console.debug(`🏭 Creating worker: ${locationId} (${timeframe})`);
       
       const worker = new WebSocketWorker(locationId, timeframe);
       this.workers.set(workerKey, worker);
@@ -37,7 +37,7 @@ class DirectAnalyticsService {
     const workerKey = `${locationId}_${timeframe}`;
     
     if (this.workers.has(workerKey)) {
-      console.log(`🗑️ Removing WebSocket worker for ${locationId} (${timeframe})`);
+      console.debug(`🗑️ Removing worker: ${locationId}`);
       
       const worker = this.workers.get(workerKey);
       worker.disconnect();
@@ -93,7 +93,7 @@ class DirectAnalyticsService {
    * Reconnect all workers
    */
   reconnectAll() {
-    console.log(`🔄 Reconnecting all ${this.workers.size} workers`);
+    console.debug(`🔄 Reconnecting ${this.workers.size} workers`);
     
     for (const [key, worker] of this.workers) {
       if (!worker.isConnected) {
@@ -106,7 +106,7 @@ class DirectAnalyticsService {
    * Disconnect all workers (cleanup)
    */
   disconnectAll() {
-    console.log(`🔌 Disconnecting all ${this.workers.size} workers`);
+    console.debug(`🔌 Disconnecting ${this.workers.size} workers`);
     
     for (const [key, worker] of this.workers) {
       worker.disconnect();
