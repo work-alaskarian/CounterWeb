@@ -1,0 +1,17 @@
+[Unit]
+Description=Counter Web Application
+After=network.target
+
+[Service]
+Type=simple
+User=hadi
+Group=hadi
+WorkingDirectory=/home/hadi/counter_web
+ExecStart=/usr/bin/npx serve public -l 3000
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PATH=/usr/bin:/bin:/usr/local/bin
+
+[Install]
+WantedBy=multi-user.target
