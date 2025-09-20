@@ -522,11 +522,6 @@
 		margin-bottom: 30px;
 	}
 
-	.hero-icon .material-icons {
-		font-size: 80px;
-		color: #16a085;
-		text-shadow: 0 4px 8px rgba(22, 160, 133, 0.3);
-	}
 
 	.hero-logo {
 		width: 120px;
@@ -693,9 +688,6 @@
 			margin-bottom: 40px;
 		}
 
-		.hero-icon .material-icons {
-			font-size: 60px;
-		}
 
 		.hero-stats {
 			gap: 30px;
@@ -746,18 +738,6 @@
 		}
 	}
 
-	/* Placeholder styling */
-	.placeholder {
-		background: rgba(22, 160, 133, 0.1);
-		border: 2px dashed #16a085;
-		padding: 60px 20px;
-		text-align: center;
-		margin: 20px 0;
-		border-radius: 10px;
-		color: #16a085;
-		font-size: 18px;
-		font-weight: 500;
-	}
 
 	/* Desktop Responsive */
 	@media (min-width: 1024px) {
