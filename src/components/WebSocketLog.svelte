@@ -1,93 +1,53 @@
 <!--
-  WebSocket Status Component - Simplified
-  Shows basic connection status for debugging
+  Copyright Component
 -->
 <script>
-  import { onMount } from 'svelte';
-  import globalWebSocketService from '../lib/services/global-websocket.js';
-
-  let connectionStatus = 'disconnected';
-  let lastMessage = 'No connection yet';
-  let messageCount = 0;
-
-  onMount(() => {
-    // Subscribe to connection changes
-    globalWebSocketService.onConnectionChange((status) => {
-      connectionStatus = status.type;
-      messageCount++;
-      lastMessage = `Connection: ${status.type} at ${new Date().toLocaleTimeString()}`;
-    });
-  });
+  let currentYear = new Date().getFullYear();
 </script>
 
-<div class="websocket-log">
-  <div class="log-header">
-    <h4>🔌 WebSocket Status</h4>
-    <div class="status-indicator {connectionStatus}"></div>
-  </div>
-
-  <div class="log-content">
-    <div class="status-info">
-      <span>Status: <strong>{connectionStatus}</strong></span>
-      <span>Messages: <strong>{messageCount}</strong></span>
-    </div>
-    <div class="last-message">{lastMessage}</div>
+<div class="copyright-notice">
+  <div class="copyright-content">
+    <p>© {currentYear} العتبة العسكرية المقدسة. جميع الحقوق محفوظة.</p>
+    <p class="copyright-sub">نظام إحصاء الزوار - الإصدار 2.0</p>
   </div>
 </div>
 
 <style>
-  .websocket-log {
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
+  .copyright-notice {
+    background: rgba(22, 160, 133, 0.05);
+    border: 1px solid rgba(22, 160, 133, 0.2);
     border-radius: 8px;
-    padding: 16px;
-    margin: 16px 0;
+    padding: 20px;
+    margin: 40px 0 20px;
+    text-align: center;
+    font-family: 'Cairo', sans-serif;
   }
 
-  .log-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-  }
-
-  .log-header h4 {
+  .copyright-content p {
     margin: 0;
-    color: #495057;
-  }
-
-  .status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: #6c757d;
-  }
-
-  .status-indicator.connected {
-    background: #28a745;
-  }
-
-  .status-indicator.connecting {
-    background: #ffc107;
-  }
-
-  .status-indicator.error {
-    background: #dc3545;
-  }
-
-  .log-content {
+    color: #16a085;
+    font-weight: 600;
     font-size: 14px;
-    color: #6c757d;
+    line-height: 1.5;
   }
 
-  .status-info {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 8px;
+  .copyright-sub {
+    color: #718096 !important;
+    font-size: 12px !important;
+    font-weight: 400 !important;
+    margin-top: 4px !important;
   }
 
-  .last-message {
-    font-style: italic;
-    color: #868e96;
+  :global(.dark-mode) .copyright-notice {
+    background: rgba(22, 160, 133, 0.1);
+    border-color: rgba(22, 160, 133, 0.3);
+  }
+
+  :global(.dark-mode) .copyright-content p {
+    color: #16a085;
+  }
+
+  :global(.dark-mode) .copyright-sub {
+    color: #a0aec0 !important;
   }
 </style>

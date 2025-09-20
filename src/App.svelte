@@ -317,22 +317,15 @@
 		width: 45px;
 		height: 45px;
 		object-fit: contain;
-		filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(500%) hue-rotate(140deg) brightness(95%) contrast(90%) drop-shadow(0 2px 6px rgba(22, 160, 133, 0.3));
+		filter: brightness(0) saturate(100%) invert(56%) sepia(19%) saturate(1530%) hue-rotate(131deg) brightness(96%) contrast(87%) drop-shadow(0 2px 6px rgba(22, 160, 133, 0.3));
 		transition: all 0.3s ease;
 	}
 
 	.brand-logo:hover {
 		transform: scale(1.05);
-		filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(500%) hue-rotate(140deg) brightness(100%) contrast(95%) drop-shadow(0 4px 10px rgba(22, 160, 133, 0.4));
 	}
 
-	:global(.dark-mode) .brand-logo {
-		filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(424%) hue-rotate(113deg) brightness(98%) contrast(91%) drop-shadow(0 2px 8px rgba(26, 188, 156, 0.4));
-	}
 
-	:global(.dark-mode) .brand-logo:hover {
-		filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(424%) hue-rotate(113deg) brightness(105%) contrast(95%) drop-shadow(0 4px 12px rgba(26, 188, 156, 0.5));
-	}
 
 	.brand h1 {
 		color: #16a085;
@@ -344,7 +337,7 @@
 	}
 
 	:global(.dark-mode) .brand h1 {
-		color: #1abc9c;
+		color: #16a085;
 	}
 
 	.navigation {
@@ -524,40 +517,26 @@
 
 
 	.hero-logo {
-		width: 120px;
-		height: 120px;
+		width: 160px;
+		height: 160px;
 		object-fit: contain;
-		filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(500%) hue-rotate(140deg) brightness(95%) contrast(90%) drop-shadow(0 8px 16px rgba(22, 160, 133, 0.4));
+		filter: brightness(0) saturate(100%) invert(56%) sepia(19%) saturate(1530%) hue-rotate(131deg) brightness(96%) contrast(87%) drop-shadow(0 8px 16px rgba(22, 160, 133, 0.4));
 		animation: heroLogoFloat 4s ease-in-out infinite;
 		transition: all 0.3s ease;
 	}
 
-	:global(.dark-mode) .hero-logo {
-		filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(424%) hue-rotate(113deg) brightness(98%) contrast(91%) drop-shadow(0 8px 20px rgba(26, 188, 156, 0.5));
-		animation: heroLogoFloatDark 4s ease-in-out infinite;
-	}
 
 	@keyframes heroLogoFloat {
 		0%, 100% {
 			transform: translateY(0px) scale(1);
-			filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(500%) hue-rotate(140deg) brightness(95%) contrast(90%) drop-shadow(0 8px 16px rgba(22, 160, 133, 0.4));
+			filter: brightness(0) saturate(100%) invert(56%) sepia(19%) saturate(1530%) hue-rotate(131deg) brightness(96%) contrast(87%) drop-shadow(0 8px 16px rgba(22, 160, 133, 0.4));
 		}
 		50% {
 			transform: translateY(-10px) scale(1.02);
-			filter: brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(600%) hue-rotate(140deg) brightness(100%) contrast(95%) drop-shadow(0 12px 24px rgba(22, 160, 133, 0.5));
+			filter: brightness(0) saturate(100%) invert(56%) sepia(19%) saturate(1530%) hue-rotate(131deg) brightness(96%) contrast(87%) drop-shadow(0 12px 24px rgba(22, 160, 133, 0.5));
 		}
 	}
 
-	@keyframes heroLogoFloatDark {
-		0%, 100% {
-			transform: translateY(0px) scale(1);
-			filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(424%) hue-rotate(113deg) brightness(98%) contrast(91%) drop-shadow(0 8px 20px rgba(26, 188, 156, 0.5));
-		}
-		50% {
-			transform: translateY(-10px) scale(1.02);
-			filter: brightness(0) saturate(100%) invert(68%) sepia(78%) saturate(500%) hue-rotate(113deg) brightness(105%) contrast(95%) drop-shadow(0 12px 28px rgba(26, 188, 156, 0.6));
-		}
-	}
 
 	.hero-title {
 		font-size: 48px;
