@@ -42,7 +42,7 @@
       console.log('🗺️ Map: Map instance created successfully');
 
     // Try custom tile server first, fallback to OpenStreetMap
-    const customMapUrl = import.meta.env?.VITE_MAP_URL || 'http://10.10.1.205/';
+    const customMapUrl = import.meta.env?.VITE_MAP_URL || 'http://10.10.1.205:8001/';
     console.log('🗺️ Map: Trying custom tile server:', customMapUrl);
 
     const customTileLayer = L.tileLayer(customMapUrl + '{z}/{x}/{y}.png', {
