@@ -9,7 +9,7 @@ class GlobalWebSocketService {
     this.isConnected = false;
     this.subscribers = new Map(); // locationId -> callback function
     this.connectionCallbacks = new Set(); // connection status callbacks
-    this.currentTimeframe = 'HOURLY'; // Track current timeframe
+    this.currentTimeframe = 'DAILY'; // Track current timeframe - match backend default
     this.isReconnecting = false; // Track if we're reconnecting due to timeframe change
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
@@ -114,7 +114,10 @@ class GlobalWebSocketService {
   }
 
   /**
-   * Handle incoming WebSocket messages - TIMEFRAME FILTERED VERSION
+   * Handle incoming WebSocket messages - TEMPORARY MAPPING FOR ARABIC NAMES
+   * TODO: Backend should send data with location_id as keys instead of Arabic names
+   * Example: { "womens-section": {live: 123}, "northern-gate": {live: 456} }
+   * Instead of: { "تفتيش_النساء": {live: 123}, "تفتيش_الرجال": {live: 456} }
    */
   handleMessage(data) {
     // ONLY process live_count_update messages
@@ -126,47 +129,74 @@ class GlobalWebSocketService {
         return;
       }
 
-      // Log important counts
+      // TODO: Remove this mapping when backend uses location_id as keys
+      // Temporary mapping from Arabic names to location IDs
+      const arabicToLocationId = {
+        'تفتيش_الرجال': ['northern-gate', 'men_region'],
+        'تفتيش_النساء': ['womens-section', 'women_region']
+      };
+
+      // Extract Arabic name keys from WebSocket data
+      const arabicKeys = Object.keys(data.data || {}).filter(key =>
+        key !== 'total_count' && key !== 'total_all_time' && key !== 'timeframe' && key !== 'timestamp'
+      );
+
+      // Log important counts with Arabic names
       console.log('📊 Live counts:', {
         total: data.data?.total_count,
-        men: data.data?.men_region?.live,
-        women: data.data?.women_region?.live,
+        locations: arabicKeys.map(key => ({
+          arabicName: key,
+          mappedIds: arabicToLocationId[key] || [key],
+          live: data.data[key]?.live,
+          total: data.data[key]?.total
+        })),
         timeframe: data.timeframe
       });
 
-      // Extract different counts for different locations
-      const menRegionLive = data.data?.men_region?.live;
-      const womenRegionLive = data.data?.women_region?.live;
       const totalCount = data.data?.total_count;
 
       // Notify subscribers with location-specific data
       this.subscribers.forEach((callback, locationId) => {
         try {
           let countForLocation;
+          let locationData = null;
 
-          // Determine which count to send based on location ID
-          if (locationId === 'men_region' || locationId === 'northern-gate') {
-            countForLocation = menRegionLive;
-          } else if (locationId === 'women_region' || locationId === 'womens-section') {
-            countForLocation = womenRegionLive;
-          } else if (locationId === 'all') {
+          // Handle 'all' location
+          if (locationId === 'all') {
             countForLocation = totalCount;
           } else {
-            countForLocation = totalCount; // Default fallback
+            // TODO: Remove this reverse mapping when backend uses location_id
+            // Find Arabic key that maps to this location ID
+            const arabicKey = Object.keys(arabicToLocationId).find(key => {
+              const mappedIds = arabicToLocationId[key];
+              return mappedIds.includes(locationId);
+            });
+
+            if (arabicKey && data.data[arabicKey]) {
+              locationData = data.data[arabicKey];
+              countForLocation = locationData?.live;
+            } else {
+              // Direct match with key (for future location_id structure)
+              if (data.data[locationId]) {
+                locationData = data.data[locationId];
+                countForLocation = locationData?.live;
+              }
+            }
           }
 
           if (countForLocation !== undefined) {
             callback({
               count: countForLocation,
               data: data.data,
-              locationSpecific: {
-                men_region: menRegionLive,
-                women_region: womenRegionLive,
-                total_count: totalCount
-              }
+              locationData: locationData,
+              arabicKeys: arabicKeys,
+              allLocations: arabicKeys.reduce((acc, key) => {
+                acc[key] = data.data[key];
+                return acc;
+              }, {})
             });
           } else {
-            console.warn(`🌐 No count available for ${locationId}`);
+            console.debug(`🌐 No count available for ${locationId}`);
           }
         } catch (error) {
           console.error(`🌐 Update error for ${locationId}:`, error);

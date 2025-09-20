@@ -12,7 +12,7 @@
   } from '../lib/stores/analytics-simple.js';
   import { onMount, onDestroy } from 'svelte';
   
-  export let timeframe = 'Hourly';
+  export let timeframe = 'Daily';
   let showAddModal = false;
   
   $: ({ showCustomization, gridSize } = $customization);
@@ -169,9 +169,7 @@
 
 <svelte:head>
   <title>عدادات مواقع متعددة</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="/fonts/inter.css" rel="stylesheet">
 </svelte:head>
 
 <div class="locations-header">

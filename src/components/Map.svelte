@@ -52,20 +52,12 @@
       errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
     });
 
-    // Fallback to OpenStreetMap if custom server fails
-    const osmTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
-      maxZoom: 19
-    });
-
-    // Add custom tile layer first
+    // Add custom tile layer only - no internet fallback
     customTileLayer.addTo(map);
 
-    // Add fallback error handling
+    // Add error handling for failed tiles
     customTileLayer.on('tileerror', function(e) {
-      console.log('🗺️ Map: Custom tile server failed, switching to OpenStreetMap');
-      map.removeLayer(customTileLayer);
-      osmTileLayer.addTo(map);
+      console.warn('🗺️ Map: Custom tile server failed for tile:', e.coords);
     });
 
     const points = [

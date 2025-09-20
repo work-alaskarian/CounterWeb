@@ -55,6 +55,7 @@
    */
   function initializeSimpleWebSocket() {
     // Subscribe to data updates from global WebSocket service
+    // TODO: Backend should use location_id as keys instead of Arabic names
     unsubscribeFromData = globalWebSocketService.subscribe(location.id, handleSimpleLiveCountUpdate);
 
     // Subscribe to connection status changes
